@@ -36,6 +36,11 @@ test("autodeploy uses gh + SSH and verifies namespace webhook access", async (t)
 
   const appEnv = await readFile(fixture.appEnv, "utf8");
   assert.doesNotMatch(appEnv, /legacy-token-must-not-reach-the-app/);
+  assert.doesNotMatch(appEnv, /cloud-key-must-not-reach-the-app/);
+
+  assert.match(ocLog, /rollout restart -n test-project deploy\/cen-starter/);
+  assert.match(ocLog, /rollout status -n test-project deploy\/cen-starter --timeout=15m/);
+  assert.match(ocLog, /get endpoints cen-starter/);
 });
 
 test("autodeploy stops before mutation when gh is not authenticated", async (t) => {
@@ -49,7 +54,125 @@ test("autodeploy stops before mutation when gh is not authenticated", async (t) 
   assert.doesNotMatch(ocLog, /\b(create|apply|set|start-build)\b/);
 });
 
-async function createFixture(t, { ghAuthenticated = true } = {}) {
+test("autodeploy keeps the initial deploy usable when webhook RBAC is unavailable", async (t) => {
+  const fixture = await createFixture(t, { webhookRbacDenied: true });
+  const result = runDeploy(fixture);
+
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /GitHub push automation is inactive/);
+  assert.match(result.output, /Autodeploy: inactive/);
+
+  const ghLog = await readFile(fixture.ghLog, "utf8");
+  assert.doesNotMatch(ghLog, /\/hooks/);
+
+  const ocLog = await readFile(fixture.ocLog, "utf8");
+  assert.match(ocLog, /start-build -n test-project cen-starter/);
+});
+
+test("autodeploy reuses an existing webhook RoleBinding without fresh bind rights", async (t) => {
+  const fixture = await createFixture(t, {
+    webhookRbacDenied: true,
+    webhookRbacExists: true,
+  });
+  const result = runDeploy(fixture);
+
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /Autodeploy: git push to main now builds and deploys automatically/);
+
+  const ocLog = await readFile(fixture.ocLog, "utf8");
+  assert.match(ocLog, /get rolebinding cen-starter-webhook -n test-project/);
+  assert.doesNotMatch(ocLog, /auth can-i/);
+});
+
+test("autodeploy validates and deploys a configured source branch", async (t) => {
+  const fixture = await createFixture(t);
+  const result = runDeploy(fixture, ["--branch", "release/2026-08"]);
+
+  assert.equal(result.status, 0, result.output);
+  const manifests = await readFile(fixture.manifests, "utf8");
+  assert.match(manifests, /ref: "release\/2026-08"/);
+  assert.match(result.output, /git push to release\/2026-08/);
+});
+
+test("Code Engine fresh deploy targets explicitly and reconciles health settings", async (t) => {
+  const fixture = await createCodeEngineFixture(t);
+  const result = spawnSync(
+    "bash",
+    ["deploy/ce-deploy.sh", "-p", "test-project", "-g", "engagement", "--region", "eu-de"],
+    {
+      cwd: fixture.directory,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        MOCK_STATE: fixture.state,
+        PATH: `${fixture.bin}:${process.env.PATH}`,
+      },
+    },
+  );
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.equal(result.status, 0, output);
+  assert.match(
+    output,
+    /Application: https:\/\/cen-starter(?:-oauth-proxy)?\.test\.eu-de\.codeengine\.appdomain\.cloud/,
+  );
+
+  const log = await readFile(fixture.ibmcloudLog, "utf8");
+  const ceScript = await readFile(path.join(fixture.directory, "deploy/ce-deploy.sh"), "utf8");
+  const visibility = ceScript.includes('APP_VISIBILITY="project"') ? "project" : "public";
+  assert.match(log, /target -g engagement/);
+  assert.match(log, /target -r eu-de/);
+  assert.match(log, /ce project create --name test-project --wait --wait-timeout 600/);
+  assert.match(log, /ce project select --name test-project/);
+  assert.match(log, /ce application create .*--port http1:8080/);
+  assert.match(log, new RegExp(`--visibility ${visibility}`));
+  assert.match(log, /--probe-live path=\/api\/health/);
+  assert.match(log, /--probe-live initial-delay=10/);
+  assert.match(log, /--probe-live interval=10/);
+  assert.match(log, /--probe-ready path=\/api\/health/);
+  assert.match(log, /--wait-timeout 1200/);
+
+  const appEnv = await readFile(fixture.appEnv, "utf8");
+  assert.doesNotMatch(appEnv, /cloud-key-must-not-reach-the-app/);
+  assert.match(
+    appEnv,
+    /(?:BETTER_AUTH_URL=https:\/\/cen-starter\.test\.eu-de\.codeengine\.appdomain\.cloud|OAUTH2_PROXY_REDIRECT_URL=https:\/\/cen-starter-oauth-proxy\.test\.eu-de\.codeengine\.appdomain\.cloud\/oauth2\/callback)/,
+  );
+});
+
+test("Code Engine update reuses credentials and fully reconciles the application", async (t) => {
+  const fixture = await createCodeEngineFixture(t, { existing: true, includeApiKey: false });
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      IBMCLOUD_API_KEY: "",
+      MOCK_STATE: fixture.state,
+      PATH: `${fixture.bin}:${process.env.PATH}`,
+    },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.equal(result.status, 0, output);
+  assert.match(output, /Reusing Code Engine registry secret/);
+
+  const log = await readFile(fixture.ibmcloudLog, "utf8");
+  const ceScript = await readFile(path.join(fixture.directory, "deploy/ce-deploy.sh"), "utf8");
+  const visibility = ceScript.includes('APP_VISIBILITY="project"') ? "project" : "public";
+  assert.doesNotMatch(log, /ce project create/);
+  assert.doesNotMatch(log, /ce registry (create|update)/);
+  assert.match(log, /ce project select --name test-project/);
+  assert.match(log, /ce application update .*--env-from-secret app-env/);
+  assert.match(log, /ce application update .*--max-scale 4/);
+  assert.match(log, /ce application update .*--probe-live path=\/api\/health/);
+  assert.match(log, new RegExp(`ce application update .*--visibility ${visibility}`));
+});
+
+async function createFixture(
+  t,
+  { ghAuthenticated = true, webhookRbacDenied = false, webhookRbacExists = false } = {},
+) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "cen-deploy-test-"));
   t.after(async () => {
     const { rm } = await import("node:fs/promises");
@@ -69,6 +192,7 @@ async function createFixture(t, { ghAuthenticated = true } = {}) {
       "BETTER_AUTH_SECRET=test-secret-with-at-least-32-characters",
       "BETTER_AUTH_URL=https://cen-starter.example.com",
       "GITHUB_TOKEN=legacy-token-must-not-reach-the-app",
+      "export IAM_API_KEY=cloud-key-must-not-reach-the-app",
       "",
     ].join("\n"),
   );
@@ -87,6 +211,7 @@ async function createFixture(t, { ghAuthenticated = true } = {}) {
     manifests: path.join(state, "manifests.yaml"),
     ocLog: path.join(state, "oc.log"),
     state,
+    webhookRbacDenied,
   };
   await Promise.all([
     writeExecutable(path.join(bin, "git"), gitMock),
@@ -96,20 +221,80 @@ async function createFixture(t, { ghAuthenticated = true } = {}) {
     writeFile(fixture.manifests, ""),
     writeFile(fixture.ocLog, ""),
   ]);
+  if (webhookRbacExists) {
+    await writeFile(path.join(state, "webhook-rolebinding-exists"), "");
+  }
   return fixture;
 }
 
-function runDeploy(fixture) {
-  const result = spawnSync("bash", ["deploy/deploy.sh", "-n", "test-project", "--autodeploy"], {
-    cwd: fixture.directory,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GH_AUTHENTICATED: fixture.ghAuthenticated ? "true" : "false",
-      MOCK_STATE: fixture.state,
-      PATH: `${fixture.bin}:${process.env.PATH}`,
+async function createCodeEngineFixture(t, { existing = false, includeApiKey = true } = {}) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "cen-ce-deploy-test-"));
+  t.after(async () => {
+    const { rm } = await import("node:fs/promises");
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  await cp(path.join(root, "deploy"), path.join(directory, "deploy"), {
+    recursive: true,
+    filter(source) {
+      return !source.endsWith("deploy.test.mjs");
     },
   });
+  await writeFile(
+    path.join(directory, ".env.production"),
+    [
+      "DATABASE_URL=postgres://app:password@postgres.example:5432/app",
+      "BETTER_AUTH_SECRET=test-secret-with-at-least-32-characters",
+      "BETTER_AUTH_URL=https://cen-starter.example.com",
+      ...(includeApiKey ? ["export IAM_API_KEY=cloud-key-must-not-reach-the-app"] : []),
+      "",
+    ].join("\n"),
+  );
+
+  const bin = path.join(directory, "bin");
+  const state = path.join(directory, "state");
+  await mkdir(bin);
+  await mkdir(state);
+
+  const fixture = {
+    appEnv: path.join(state, "app-env"),
+    bin,
+    directory,
+    ibmcloudLog: path.join(state, "ibmcloud.log"),
+    state,
+  };
+  await Promise.all([
+    writeExecutable(path.join(bin, "ibmcloud"), ibmcloudMock),
+    writeFile(fixture.ibmcloudLog, ""),
+  ]);
+  if (existing) {
+    await Promise.all([
+      writeFile(path.join(state, "project-created"), ""),
+      writeFile(path.join(state, "registry-created"), ""),
+      writeFile(path.join(state, "secret-created"), ""),
+      writeFile(path.join(state, "app-created"), ""),
+      writeFile(path.join(state, "proxy-created"), ""),
+    ]);
+  }
+  return fixture;
+}
+
+function runDeploy(fixture, extraArgs = []) {
+  const result = spawnSync(
+    "bash",
+    ["deploy/deploy.sh", "-n", "test-project", "--autodeploy", ...extraArgs],
+    {
+      cwd: fixture.directory,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GH_AUTHENTICATED: fixture.ghAuthenticated ? "true" : "false",
+        MOCK_STATE: fixture.state,
+        MOCK_WEBHOOK_RBAC_DENIED: fixture.webhookRbacDenied ? "true" : "false",
+        PATH: `${fixture.bin}:${process.env.PATH}`,
+      },
+    },
+  );
   return {
     output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
     status: result.status,
@@ -125,7 +310,7 @@ const gitMock = String.raw`#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
   "remote get-url origin") printf '%s\n' 'https://github.ibm.com/example/todo-app.git' ;;
-  "ls-remote --exit-code origin refs/heads/main")
+  "ls-remote --exit-code origin refs/heads/"*)
     printf '%s\n' '0123456789012345678901234567890123456789	refs/heads/main'
     ;;
   *) printf 'unexpected git call: %s\n' "$*" >&2; exit 1 ;;
@@ -180,7 +365,28 @@ if [[ "$*" == "whoami --show-server" ]]; then
 fi
 if [[ "$*" == "get namespace test-project" ]]; then exit 0; fi
 
+if [[ "$1" == auth && "$2" == can-i ]]; then
+  if [[ "$MOCK_WEBHOOK_RBAC_DENIED" == true && "$*" == *'bind clusterroles'* ]]; then
+    printf 'no\n'
+  else
+    printf 'yes\n'
+  fi
+  exit 0
+fi
+
+if [[ "$1" == get && "$2" == rolebinding ]]; then
+  [[ -f "$MOCK_STATE/webhook-rolebinding-exists" ]]
+  exit
+fi
+
 if [[ "$1" == get && "$2" == secret ]]; then exit 1; fi
+
+if [[ "$1" == get && "$2" == deployment && "$*" == *'.spec.template.spec.containers'* ]]; then
+  printf 'image-registry.openshift-image-registry.svc:5000/test-project/cen-starter@sha256:0123456789abcdef\n'
+  exit 0
+fi
+
+if [[ "$1" == get && "$2" == endpoints ]]; then printf '10.0.0.42\n'; exit 0; fi
 
 if [[ "$1" == get && "$2" == route ]]; then
   if [[ "$*" == *'.spec.host'* ]]; then printf 'todo.test.example\n'; fi
@@ -217,5 +423,87 @@ fi
 if [[ "$1" == set || "$1" == rollout ]]; then exit 0; fi
 
 printf 'unexpected oc call: %s\n' "$*" >&2
+exit 1
+`;
+
+const ibmcloudMock = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$MOCK_STATE/ibmcloud.log"
+
+if [[ "$*" == plugin\ show\ * ]]; then exit 0; fi
+if [[ "$*" == "account show" ]]; then exit 0; fi
+if [[ "$1" == target ]]; then exit 0; fi
+
+if [[ "$*" == "ce project get --name test-project" ]]; then
+  [[ -f "$MOCK_STATE/project-created" ]]
+  exit
+fi
+if [[ "$*" == ce\ project\ create* ]]; then : > "$MOCK_STATE/project-created"; exit 0; fi
+if [[ "$*" == ce\ project\ select* ]]; then exit 0; fi
+if [[ "$*" == "ce project current" ]]; then printf 'Subdomain: test\n'; exit 0; fi
+
+if [[ "$*" == "cr region-set global" ]]; then exit 0; fi
+if [[ "$*" == "cr namespace-list" ]]; then printf 'Name\n'; exit 0; fi
+if [[ "$*" == cr\ namespace-add* ]]; then exit 0; fi
+
+if [[ "$*" == ce\ registry\ get* ]]; then
+  [[ -f "$MOCK_STATE/registry-created" ]]
+  exit
+fi
+if [[ "$*" == ce\ registry\ create* || "$*" == ce\ registry\ update* ]]; then
+  : > "$MOCK_STATE/registry-created"
+  exit 0
+fi
+
+if [[ "$*" == ce\ secret\ get* ]]; then
+  [[ -f "$MOCK_STATE/secret-created" ]]
+  exit
+fi
+if [[ "$*" == ce\ secret\ create* || "$*" == ce\ secret\ update* ]]; then
+  capture_next=false
+  for argument in "$@"; do
+    if [[ "$argument" == --from-env-file ]]; then capture_next=true; continue; fi
+    if [[ "$capture_next" == true ]]; then cp "$argument" "$MOCK_STATE/app-env"; break; fi
+  done
+  : > "$MOCK_STATE/secret-created"
+  exit 0
+fi
+
+if [[ "$*" == "ce application get --name cen-starter --output url" ]]; then
+  if [[ -f "$MOCK_STATE/app-created" ]]; then
+    printf 'https://cen-starter.test.eu-de.codeengine.appdomain.cloud\n'
+    exit 0
+  fi
+  exit 1
+fi
+if [[ "$*" == "ce application get --name cen-starter" ]]; then
+  [[ -f "$MOCK_STATE/app-created" ]]
+  exit
+fi
+if [[ "$*" == "ce application get --name cen-starter-oauth-proxy --output url" ]]; then
+  if [[ -f "$MOCK_STATE/proxy-created" ]]; then
+    printf 'https://cen-starter-oauth-proxy.test.eu-de.codeengine.appdomain.cloud\n'
+    exit 0
+  fi
+  exit 1
+fi
+if [[ "$*" == "ce application get --name cen-starter-oauth-proxy" ]]; then
+  [[ -f "$MOCK_STATE/proxy-created" ]]
+  exit
+fi
+if [[ "$*" == ce\ application\ create* ]]; then
+  if [[ "$*" == *'--name cen-starter-oauth-proxy'* ]]; then
+    : > "$MOCK_STATE/proxy-created"
+  else
+    : > "$MOCK_STATE/app-created"
+  fi
+  exit 0
+fi
+if [[ "$*" == ce\ application\ update* ]]; then
+  if [[ "$*" == *'--name cen-starter-oauth-proxy'* ]]; then : > "$MOCK_STATE/proxy-created"; fi
+  exit 0
+fi
+
+printf 'unexpected ibmcloud call: %s\n' "$*" >&2
 exit 1
 `;

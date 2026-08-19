@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Hardened Code Engine deployment using the lessons from the maintained full-stack CEN
+  template: explicit region targeting, deterministic project readiness and selection,
+  reusable or rotatable registry credentials, full create/update reconciliation, valid
+  readiness and liveness probes, bounded waits, and a digest-pinned oauth2-proxy.
+- Hardened OpenShift deployment with configurable source branches, webhook-RBAC fallback,
+  explicit secret-change rollouts, ImageStream trigger coordination, final Ready-endpoint
+  verification, rollout timeouts, and stronger deployment regression tests. Deployment-only
+  credentials are now filtered from runtime secrets on both platforms.
+
 ## [0.4.0] — 2026-07-29
 
 **Breaking: the starter no longer ships the `items` example resource.** A fresh finalized

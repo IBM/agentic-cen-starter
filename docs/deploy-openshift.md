@@ -45,12 +45,18 @@ repositories normally use `github.ibm.com`, but an existing `origin` is respecte
 gh auth status --hostname github.ibm.com
 # If needed: gh auth login --hostname github.ibm.com --web
 ./deploy/deploy.sh -n <namespace> --autodeploy
+# To deploy another branch instead of main:
+./deploy/deploy.sh -n <namespace> --autodeploy --branch <branch>
 ```
 
 The script generates and registers a read-only SSH deploy key, creates the build pipeline,
 grants the namespace-scoped webhook role, registers the webhook through `gh`, verifies GitHub
 can reach it, starts the first build, and waits for rollout. No GitHub token goes in chat or
 `.env.production`.
+
+Some project roles cannot bind OpenShift's `system:webhook` ClusterRole. In that case the
+script still completes the initial build and verified rollout, but clearly reports push
+automation as inactive; ask a project administrator to grant the named permission and rerun.
 
 ## Path B — explicit image deploys (client projects, release gates)
 
@@ -83,7 +89,7 @@ With IBM App ID, add the printed `/oauth2/callback` URL under the App ID instanc
 
 - **Auto-deploy:** `git push`. Build, rollout, and schema migration happen on their own.
 - **Explicit:** build + push a new tag, rerun `deploy.sh -i <new-tag>`.
-- **Env change:** edit `.env.production`, rerun `deploy.sh`, then
-  `oc rollout restart deploy/<app-name>`.
+- **Env change:** edit `.env.production` and rerun `deploy.sh`; the script restarts and
+  verifies the rollout so the new secret is loaded.
 
 Something broken? Ask your agent — the `debug-openshift` skill exists for exactly that.

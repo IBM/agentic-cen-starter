@@ -7,9 +7,11 @@ ENV_FILE=".env.production"
 REGISTRY_SERVER="icr.io"
 IMAGE_NAME="$APP_NAME"
 REGISTRY_SECRET="${APP_NAME}-registry"
+APP_VISIBILITY="public"
 
 project=""
 resource_group=""
+region=""
 registry_namespace=""
 image=""
 database_url=""
@@ -30,11 +32,12 @@ trap cleanup EXIT
 
 usage() {
   cat <<EOF
-Usage: $0 -p <project> [-g <resource-group>] [-r <registry-namespace>]
+Usage: $0 -p <project> [-g <resource-group>] [-l <region>] [-r <registry-namespace>]
 
 Options:
   -p <project>             Code Engine project to deploy into (required)
   -g <resource-group>      IBM Cloud resource group to target
+  -l, --region <region>    IBM Cloud region to target
   -r <registry-namespace>  ICR namespace (default: sanitized project name;
                            ICR namespaces are account-global)
   -h, --help               Show this help
@@ -139,6 +142,15 @@ parse_args() {
         resource_group="$2"
         shift 2
         ;;
+      -l | --region)
+        if (($# < 2)); then
+          error "$1 requires a region"
+          usage >&2
+          exit 2
+        fi
+        region="$2"
+        shift 2
+        ;;
       -r)
         if (($# < 2)); then
           error "-r requires a registry namespace"
@@ -198,19 +210,28 @@ parse_args() {
 check_preconditions() {
   need_command ibmcloud
 
-  if ! ibmcloud ce version >/dev/null 2>&1; then
+  if ! ibmcloud plugin show code-engine >/dev/null 2>&1; then
     error "the Code Engine plugin is required; install it with 'ibmcloud plugin install code-engine'"
     exit 1
   fi
 
-  if ! ibmcloud cr info >/dev/null 2>&1; then
+  if ! ibmcloud plugin show container-registry >/dev/null 2>&1; then
     error "the Container Registry plugin is required; install it with 'ibmcloud plugin install container-registry'"
     exit 1
   fi
 
   if ! ibmcloud account show >/dev/null 2>&1; then
-    error "IBM Cloud login is required; run 'ibmcloud login --sso' yourself, then try again"
-    exit 1
+    if [[ -t 0 && -t 1 ]]; then
+      info "No IBM Cloud session found; starting SSO login."
+      ibmcloud login --sso
+      if ! ibmcloud account show >/dev/null 2>&1; then
+        error "IBM Cloud login did not establish an account session"
+        exit 1
+      fi
+    else
+      error "IBM Cloud login is required; run 'ibmcloud login --sso' yourself, then try again"
+      exit 1
+    fi
   fi
 
   if [[ ! -f "$ENV_FILE" ]]; then
@@ -223,16 +244,22 @@ target_resource_group() {
   if [[ -n "$resource_group" ]]; then
     ibmcloud target -g "$resource_group"
   fi
+  if [[ -n "$region" ]]; then
+    ibmcloud target -r "$region"
+  fi
 }
 
 ensure_project() {
   if ibmcloud ce project get --name "$project" >/dev/null 2>&1; then
     info "Selecting Code Engine project '$project'."
-    ibmcloud ce project select --name "$project"
   else
     info "Creating Code Engine project '$project'."
-    ibmcloud ce project create --name "$project"
+    ibmcloud ce project create --name "$project" --wait --wait-timeout 600
   fi
+
+  # Be explicit even though project creation normally selects the new project. This also
+  # protects the following mutations if CLI defaults or an existing context differ.
+  ibmcloud ce project select --name "$project"
 }
 
 ensure_registry_namespace() {
@@ -251,7 +278,7 @@ ensure_registry_namespace() {
   fi
 }
 
-iam_api_key() {
+configured_iam_api_key() {
   local api_key="${IBMCLOUD_API_KEY:-}"
 
   if [[ -z "$api_key" ]]; then
@@ -262,11 +289,7 @@ iam_api_key() {
     fi
   fi
 
-  if [[ -z "$api_key" ]]; then
-    error "creating registry secret '$REGISTRY_SECRET' requires IBMCLOUD_API_KEY; set it in the environment or add IAM_API_KEY=... to $ENV_FILE"
-    exit 1
-  fi
-
+  [[ -n "$api_key" ]] || return 1
   printf '%s' "$api_key"
 }
 
@@ -274,11 +297,23 @@ ensure_registry_secret() {
   local api_key=""
 
   if ibmcloud ce registry get --name "$REGISTRY_SECRET" >/dev/null 2>&1; then
-    info "Code Engine registry secret '$REGISTRY_SECRET' already exists."
+    if ! api_key=$(configured_iam_api_key); then
+      info "Reusing Code Engine registry secret '$REGISTRY_SECRET'; provide IBMCLOUD_API_KEY or IAM_API_KEY to rotate it."
+      return
+    fi
+    info "Rotating Code Engine registry secret '$REGISTRY_SECRET'."
+    ibmcloud ce registry update \
+      --name "$REGISTRY_SECRET" \
+      --server "$REGISTRY_SERVER" \
+      --username iamapikey \
+      --password "$api_key"
     return
   fi
 
-  api_key=$(iam_api_key)
+  if ! api_key=$(configured_iam_api_key); then
+    error "creating registry secret '$REGISTRY_SECRET' requires IBMCLOUD_API_KEY; set it in the environment or add IAM_API_KEY=... to $ENV_FILE"
+    exit 1
+  fi
   info "Creating Code Engine registry secret '$REGISTRY_SECRET'."
   ibmcloud ce registry create \
     --name "$REGISTRY_SECRET" \
@@ -361,9 +396,20 @@ update_app_secret() {
 
 create_app_secret() {
   env_secret_file=$(make_temp_file)
-  tmp_files+=("$env_secret_file")
 
-  sed '/^GITHUB_TOKEN=/d;/^export GITHUB_TOKEN=/d;/^IAM_API_KEY=/d;/^export IAM_API_KEY=/d' \
+  sed \
+    -e '/^GITHUB_TOKEN=/d' \
+    -e '/^export GITHUB_TOKEN=/d' \
+    -e '/^GH_TOKEN=/d' \
+    -e '/^export GH_TOKEN=/d' \
+    -e '/^GITHUB_ENTERPRISE_TOKEN=/d' \
+    -e '/^export GITHUB_ENTERPRISE_TOKEN=/d' \
+    -e '/^GH_ENTERPRISE_TOKEN=/d' \
+    -e '/^export GH_ENTERPRISE_TOKEN=/d' \
+    -e '/^IAM_API_KEY=/d' \
+    -e '/^export IAM_API_KEY=/d' \
+    -e '/^IBMCLOUD_API_KEY=/d' \
+    -e '/^export IBMCLOUD_API_KEY=/d' \
     "$ENV_FILE" > "$env_secret_file"
 
   derive_env_values "$env_secret_file"
@@ -371,24 +417,45 @@ create_app_secret() {
 }
 
 ensure_application() {
+  local action="create"
+  local arguments=()
+
   if ibmcloud ce application get --name "$APP_NAME" >/dev/null 2>&1; then
     info "Updating Code Engine application '$APP_NAME' with a cloud-side source build."
-    ibmcloud ce application update --name "$APP_NAME" \
-      --build-source . \
-      --build-dockerfile deploy/Dockerfile
+    action="update"
   else
     info "Creating Code Engine application '$APP_NAME' with a cloud-side source build."
-    ibmcloud ce application create --name "$APP_NAME" \
-      --build-source . \
-      --build-dockerfile deploy/Dockerfile \
-      --image "$image" \
-      --registry-secret "$REGISTRY_SECRET" \
-      --port 8080 \
-      --env-from-secret "$APP_SECRET" \
-      --min-scale 1 \
-      --cpu 0.5 \
-      --memory 1G
   fi
+
+  arguments=(application "$action" --name "$APP_NAME" \
+    --build-source . \
+    --build-dockerfile deploy/Dockerfile \
+    --registry-secret "$REGISTRY_SECRET" \
+    --port http1:8080 \
+    --env-from-secret "$APP_SECRET" \
+    --min-scale 1 \
+    --max-scale 4 \
+    --scale-down-delay 600 \
+    --cpu 0.5 \
+    --memory 1G \
+    --visibility "$APP_VISIBILITY" \
+    --probe-live type=http \
+    --probe-live path=/api/health \
+    --probe-live port=8080 \
+    --probe-live initial-delay=10 \
+    --probe-live interval=10 \
+    --probe-live failure-threshold=3 \
+    --probe-ready type=http \
+    --probe-ready path=/api/health \
+    --probe-ready port=8080 \
+    --wait \
+    --wait-timeout 1200)
+
+  if [[ "$action" == "create" ]]; then
+    arguments+=(--image "$image")
+  fi
+
+  ibmcloud ce "${arguments[@]}"
 }
 
 finalize_derived_urls() {
@@ -396,7 +463,6 @@ finalize_derived_urls() {
   local previous_env_file=""
 
   previous_env_file=$(make_temp_file)
-  tmp_files+=("$previous_env_file")
   cp "$env_secret_file" "$previous_env_file"
 
   app_url=$(application_url "$APP_NAME")

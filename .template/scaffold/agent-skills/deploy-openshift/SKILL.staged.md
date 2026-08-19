@@ -64,12 +64,15 @@ cp .env.production.example .env.production   # fill in the values only you can k
 # 2. One command — deploy.sh uses the existing gh login to install a read-only
 #    SSH deploy key and the GitHub webhook; no GitHub token is requested.
 ./deploy/deploy.sh -n <namespace> --autodeploy
+# Add --branch <branch> when the deploy source is not main.
 ```
 
 This sets up ImageStream + BuildConfig (from `deploy/Dockerfile`), grants the namespace-scoped
 OpenShift webhook role, installs a generated read-only SSH deploy key, registers the webhook,
 verifies a GitHub ping reaches OpenShift, starts the first build, and waits for rollout. Do
 not replace this flow with ad-hoc `oc` patches; switch to `debug-openshift` if it fails.
+If webhook-role binding is forbidden, the script finishes and verifies the initial deploy but
+reports push automation inactive; relay its exact permission guidance to the user.
 
 ## Alternative: explicit deploys (client projects, release gates)
 
@@ -103,8 +106,8 @@ The callback ends in `/oauth2/callback`.
 
 - **Auto-deploy**: `git push`. That's it — build, rollout, and schema migration happen alone.
 - **Explicit**: build + push a new tag, rerun `deploy.sh -i <new tag>`.
-- **Env change**: edit `.env.production`, rerun `deploy.sh` (it re-applies the secret), then
-  `oc rollout restart deploy/cen-starter` so pods pick it up.
+- **Env change**: edit `.env.production` and rerun `deploy.sh`; it re-applies the secret,
+  restarts the workload, and verifies the service endpoint.
 - **Pilot db → managed db**: set `DATABASE_URL` in `.env.production`, rerun `deploy.sh`,
   restart. The schema is recreated by migrate-on-start; moving existing *data* is a manual
   `pg_dump`/`pg_restore`. Remove the pilot db with

@@ -18,6 +18,7 @@ Docker locally. Reference details: [deploy/README.md](../deploy/README.md).
    ibmcloud plugin install code-engine container-registry
    ibmcloud login --sso
    ibmcloud target -g <resource-group>     # or pass -g to the script
+   ibmcloud target -r <region>             # or pass --region to the script
    ```
 
 2. **A PostgreSQL database** reachable from IBM Cloud — typically
@@ -61,7 +62,13 @@ and rolls a fresh revision with them. On the oauth-proxy flavor it also deploys 
 headers can't be spoofed from the internet — the URL you share is the proxy's.
 
 Flags: `-g <resource-group>` to target one, `-r <registry-namespace>` to override the
-default (derived from the project name; ICR namespaces are account-global).
+default (derived from the project name; ICR namespaces are account-global), and
+`--region <region>` to select the Code Engine region explicitly.
+
+The command waits for new projects and application revisions, applies HTTP readiness and
+liveness probes against `/api/health`, and reconciles runtime settings on updates as well as
+creates. If the registry secret already exists, omit the API key to reuse it or provide one
+to rotate its credentials.
 
 ## Verify
 

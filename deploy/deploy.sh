@@ -16,6 +16,9 @@ GITHUB_WEBHOOK_ROLE_BINDING="${APP_NAME}-webhook"
 namespace=""
 image=""
 autodeploy=false
+deployment_branch="main"
+webhook_rbac_available=true
+webhook_rbac_reason=""
 in_cluster_db_used=false
 external_db_used=false
 database_url=""
@@ -37,12 +40,13 @@ trap cleanup EXIT
 
 usage() {
   cat <<EOF
-Usage: $0 -n <namespace> [-i <image>] [-a|--autodeploy]
+Usage: $0 -n <namespace> [-i <image>] [-a|--autodeploy] [--branch <branch>]
 
 Options:
   -n <namespace>   OpenShift namespace/project to deploy into (required)
   -i <image>       Image reference to set on the Deployment
   -a, --autodeploy Configure OpenShift BuildConfig + GitHub webhook automation
+  --branch <branch> Git branch built by auto-deploy (default: main)
   -h, --help       Show this help
 EOF
 }
@@ -173,6 +177,15 @@ parse_args() {
         autodeploy=true
         shift
         ;;
+      --branch)
+        if (($# < 2)); then
+          error "--branch requires a branch name"
+          usage >&2
+          exit 2
+        fi
+        deployment_branch="$2"
+        shift 2
+        ;;
       -h | --help)
         usage
         exit 0
@@ -203,6 +216,18 @@ parse_args() {
   if [[ -z "$namespace" ]]; then
     error "-n <namespace> is required"
     usage >&2
+    exit 2
+  fi
+
+  if [[ "$deployment_branch" == -* \
+    || "$deployment_branch" == *..* \
+    || "$deployment_branch" == *~* \
+    || "$deployment_branch" == *^* \
+    || "$deployment_branch" == *:* \
+    || "$deployment_branch" == *' '* \
+    || "$deployment_branch" == */ \
+    || "$deployment_branch" == .* ]]; then
+    error "invalid deployment branch: '$deployment_branch'"
     exit 2
   fi
 }
@@ -313,18 +338,34 @@ create_app_secret() {
   if [[ "$in_cluster_db_used" == "true" ]]; then
     sed \
       -e '/^GITHUB_TOKEN=/d' \
+      -e '/^export GITHUB_TOKEN=/d' \
       -e '/^GH_TOKEN=/d' \
+      -e '/^export GH_TOKEN=/d' \
       -e '/^GITHUB_ENTERPRISE_TOKEN=/d' \
+      -e '/^export GITHUB_ENTERPRISE_TOKEN=/d' \
       -e '/^GH_ENTERPRISE_TOKEN=/d' \
+      -e '/^export GH_ENTERPRISE_TOKEN=/d' \
+      -e '/^IAM_API_KEY=/d' \
+      -e '/^export IAM_API_KEY=/d' \
+      -e '/^IBMCLOUD_API_KEY=/d' \
+      -e '/^export IBMCLOUD_API_KEY=/d' \
       -e '/^DATABASE_URL=/d' \
       "$ENV_FILE" > "$env_secret_file"
     printf '\nDATABASE_URL=%s\n' "$database_url" >> "$env_secret_file"
   else
     sed \
       -e '/^GITHUB_TOKEN=/d' \
+      -e '/^export GITHUB_TOKEN=/d' \
       -e '/^GH_TOKEN=/d' \
+      -e '/^export GH_TOKEN=/d' \
       -e '/^GITHUB_ENTERPRISE_TOKEN=/d' \
+      -e '/^export GITHUB_ENTERPRISE_TOKEN=/d' \
       -e '/^GH_ENTERPRISE_TOKEN=/d' \
+      -e '/^export GH_ENTERPRISE_TOKEN=/d' \
+      -e '/^IAM_API_KEY=/d' \
+      -e '/^export IAM_API_KEY=/d' \
+      -e '/^IBMCLOUD_API_KEY=/d' \
+      -e '/^export IBMCLOUD_API_KEY=/d' \
       "$ENV_FILE" > "$env_secret_file"
   fi
 
@@ -399,8 +440,8 @@ check_github_preconditions() {
     exit 1
   fi
 
-  if ! git ls-remote --exit-code origin refs/heads/main >/dev/null 2>&1; then
-    error "origin has no reachable main branch; push the project before deploying"
+  if ! git ls-remote --exit-code origin "refs/heads/$deployment_branch" >/dev/null 2>&1; then
+    error "origin has no reachable '$deployment_branch' branch; push it before deploying"
     exit 1
   fi
 }
@@ -506,21 +547,6 @@ ensure_github_webhook_secret() {
 
 apply_build_resources() {
   cat <<EOF | oc apply -n "$namespace" -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: $GITHUB_WEBHOOK_ROLE_BINDING
-  labels:
-    app.kubernetes.io/name: $APP_NAME
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: system:webhook
-subjects:
-  - apiGroup: rbac.authorization.k8s.io
-    kind: Group
-    name: system:unauthenticated
----
 apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
@@ -540,7 +566,7 @@ spec:
     type: Git
     git:
       uri: "$GIT_SSH_URL"
-      ref: main
+      ref: "$deployment_branch"
     sourceSecret:
       name: $GITHUB_SOURCE_SECRET
   strategy:
@@ -557,6 +583,85 @@ spec:
         secretReference:
           name: $GITHUB_WEBHOOK_SECRET
 EOF
+}
+
+webhook_role_binding_manifest() {
+  cat <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: $GITHUB_WEBHOOK_ROLE_BINDING
+  labels:
+    app.kubernetes.io/name: $APP_NAME
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:webhook
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:unauthenticated
+EOF
+}
+
+webhook_rbac_apply_was_forbidden() {
+  case "$1" in
+    *'Error from server (Forbidden)'* | *'reason: Forbidden'* | *'is forbidden:'* | *'not permitted'* | *'cannot bind'*)
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+disable_webhook_rbac() {
+  webhook_rbac_available=false
+  webhook_rbac_reason="$1"
+  warning "GitHub push automation is inactive: $webhook_rbac_reason."
+  warning "Ask a project administrator to grant access to ClusterRole system:webhook, then rerun this command."
+}
+
+ensure_webhook_rbac() {
+  local allowed=""
+  local apply_output=""
+
+  if ! oc get rolebinding "$GITHUB_WEBHOOK_ROLE_BINDING" -n "$namespace" >/dev/null 2>&1; then
+    if ! allowed=$(oc auth can-i create rolebindings.rbac.authorization.k8s.io -n "$namespace"); then
+      error "could not check permission to create the webhook RoleBinding"
+      exit 1
+    fi
+    if [[ "$allowed" != "yes" ]]; then
+      if [[ "$allowed" == "no" ]]; then
+        disable_webhook_rbac "current user cannot create RoleBindings in namespace '$namespace'"
+        return
+      fi
+      error "unexpected response while checking RoleBinding permission: '$allowed'"
+      exit 1
+    fi
+
+    if ! allowed=$(oc auth can-i bind clusterroles.rbac.authorization.k8s.io/system:webhook -n "$namespace"); then
+      error "could not check permission to bind ClusterRole system:webhook"
+      exit 1
+    fi
+    if [[ "$allowed" != "yes" ]]; then
+      if [[ "$allowed" == "no" ]]; then
+        disable_webhook_rbac "current user cannot bind ClusterRole system:webhook in namespace '$namespace'"
+        return
+      fi
+      error "unexpected response while checking ClusterRole binding permission: '$allowed'"
+      exit 1
+    fi
+  fi
+
+  if apply_output=$(webhook_role_binding_manifest | oc apply -n "$namespace" -f - 2>&1); then
+    printf '%s\n' "$apply_output"
+  else
+    printf '%s\n' "$apply_output" >&2
+    if webhook_rbac_apply_was_forbidden "$apply_output"; then
+      disable_webhook_rbac "OpenShift rejected the webhook RoleBinding as forbidden"
+      return
+    fi
+    exit 1
+  fi
 }
 
 create_github_webhook() {
@@ -685,6 +790,46 @@ wait_for_build() {
   done
 }
 
+wait_for_autodeploy_image() {
+  local current_image=""
+  local deadline=$((SECONDS + 60))
+
+  while ((SECONDS < deadline)); do
+    current_image=$(oc get deployment "$APP_NAME" -n "$namespace" \
+      -o "jsonpath={.spec.template.spec.containers[?(@.name=='$APP_CONTAINER')].image}" \
+      2>/dev/null || true)
+    if [[ "$current_image" == *"/${namespace}/${APP_NAME}@sha256:"* ]]; then
+      info "Deployment observed the completed ImageStream build."
+      return
+    fi
+    sleep 2
+  done
+
+  error "timed out waiting for the Deployment image trigger to observe the completed build"
+  printf 'Inspect with: oc get deploy/%s istag/%s:latest -n %s -o yaml\n' \
+    "$APP_NAME" "$APP_NAME" "$namespace" >&2
+  exit 1
+}
+
+verify_service_endpoint() {
+  local endpoint=""
+  local deadline=$((SECONDS + 60))
+
+  while ((SECONDS < deadline)); do
+    endpoint=$(oc get endpoints "$APP_NAME" -n "$namespace" \
+      -o 'jsonpath={.subsets[0].addresses[0].ip}' 2>/dev/null || true)
+    if [[ -n "$endpoint" ]]; then
+      info "Verified service '$APP_NAME' has a Ready endpoint."
+      return
+    fi
+    sleep 2
+  done
+
+  error "service '$APP_NAME' has no Ready endpoint after rollout"
+  oc get pods -n "$namespace" -l "app.kubernetes.io/name=$APP_NAME" >&2 || true
+  exit 1
+}
+
 configure_autodeploy() {
   local webhook_secret_value=""
   local server_url=""
@@ -707,16 +852,20 @@ configure_autodeploy() {
   oc set build-secret -n "$namespace" --source "bc/$APP_NAME" "$GITHUB_SOURCE_SECRET"
   oc set triggers -n "$namespace" "deploy/$APP_NAME" --from-image="$APP_NAME:latest" -c "$APP_CONTAINER"
 
-  server_url=$(oc whoami --show-server)
-  server_url="${server_url%/}"
-  webhook_url="${server_url}/apis/build.openshift.io/v1/namespaces/${namespace}/buildconfigs/${APP_NAME}/webhooks/${webhook_secret_value}/github"
-  hook_id=$(create_github_webhook "$webhook_url")
-  verify_github_webhook "$hook_id"
+  ensure_webhook_rbac
+  if [[ "$webhook_rbac_available" == "true" ]]; then
+    server_url=$(oc whoami --show-server)
+    server_url="${server_url%/}"
+    webhook_url="${server_url}/apis/build.openshift.io/v1/namespaces/${namespace}/buildconfigs/${APP_NAME}/webhooks/${webhook_secret_value}/github"
+    hook_id=$(create_github_webhook "$webhook_url")
+    verify_github_webhook "$hook_id"
+  fi
 
   started_build=$(oc start-build -n "$namespace" "$APP_NAME" -o name)
   build_ref="build/${started_build##*/}"
   info "Started $build_ref."
   wait_for_build "$build_ref"
+  wait_for_autodeploy_image
 }
 
 capture_route_url() {
@@ -760,7 +909,11 @@ print_summary() {
   fi
 
   if [[ "$autodeploy" == "true" ]]; then
-    info "Autodeploy: git push to main now builds and deploys automatically"
+    if [[ "$webhook_rbac_available" == "true" ]]; then
+      info "Autodeploy: git push to $deployment_branch now builds and deploys automatically"
+    else
+      info "Autodeploy: inactive ($webhook_rbac_reason)"
+    fi
   fi
 
   if ((${#derived_env_summary[@]} > 0)); then
@@ -786,5 +939,9 @@ elif [[ -n "$image" ]]; then
   oc set image -n "$namespace" "deploy/$APP_NAME" "$APP_CONTAINER=$image"
 fi
 
-oc rollout status -n "$namespace" "deploy/$APP_NAME"
+# Secret-only changes do not alter the pod template. Restart deliberately so every rerun
+# deploys the just-synchronized environment, even when the image digest is unchanged.
+oc rollout restart -n "$namespace" "deploy/$APP_NAME"
+oc rollout status -n "$namespace" "deploy/$APP_NAME" --timeout=15m
+verify_service_endpoint
 print_summary

@@ -38,6 +38,9 @@ Create `.env.production` from `.env.production.example` and set production value
 # Uses the existing gh login; deploy.sh installs a scoped read-only SSH deploy key.
 ./deploy/deploy.sh -n <namespace> --autodeploy
 
+# Non-main deployment branch:
+./deploy/deploy.sh -n <namespace> --autodeploy --branch <branch>
+
 # Explicit: build/push yourself, deploy a specific image.
 ./deploy/deploy.sh -n <namespace> -i <registry>/<repo>/cen-starter:<tag>
 ```
@@ -45,7 +48,9 @@ Create `.env.production` from `.env.production.example` and set production value
 Either way the script creates/updates the `app-env` secret from `.env.production`, applies the
 kustomize base in `deploy/openshift`, and waits for rollout. Auto-deploy uses the existing
 GitHub CLI login to register a generated read-only SSH deploy key and webhook; no GitHub token
-belongs in `.env.production`.
+belongs in `.env.production`. If the current user cannot bind OpenShift's `system:webhook`
+role, the initial build and deployment still complete, but the summary marks push automation
+inactive and identifies the permission an administrator must grant.
 
 **Derived values**: the script applies the route first to reserve the hostname, then fills in
 what depends on it — `BETTER_AUTH_URL` (or, on the oauth-proxy flavor,
@@ -64,22 +69,25 @@ Create `.env.production` from `.env.production.example` (requires `DATABASE_URL`
 Engine has no in-cluster database convention), then:
 
 ```bash
-./deploy/ce-deploy.sh -p <project>    # -g <resource-group>, -r <registry-namespace>
+./deploy/ce-deploy.sh -p <project>    # -g <resource-group>, --region <region>, -r <registry-namespace>
 ```
 
 Idempotent, first time and every time after. The script selects or creates the Code Engine
 project, ensures the ICR namespace and registry secret (first run needs `IBMCLOUD_API_KEY`
 in the environment or `IAM_API_KEY=` in `.env.production` — filtered out of the app
 secret), builds the image cloud-side from the working tree (`--build-source`, no local
-Docker), creates/updates the `app-env` secret and the app (`--min-scale 1` — cold starts
-hurt an app with auth sessions), and applies the same derived-values convention as the
+Docker), creates/updates the `app-env` secret and fully reconciles the app's scaling,
+visibility, resources, wait timeout, and `/api/health` probes (`--min-scale 1` — cold starts
+hurt an app with auth sessions). Existing registry credentials are reused when no API key is
+provided, or rotated when one is present. The script applies the same derived-values convention as the
 OpenShift script: the real app URL is read from Code Engine and injected into the secret
 (`BETTER_AUTH_URL`; on the oauth-proxy flavor `OAUTH2_PROXY_REDIRECT_URL` +
 `OAUTH2_PROXY_UPSTREAMS` + a generated-once cookie secret), followed by a fresh revision.
 
 On the oauth-proxy flavor the script additionally runs oauth2-proxy as its own public Code
 Engine app in front, and deploys the main app with `--visibility project` so the forwarded
-identity headers cannot be spoofed from the internet.
+identity headers cannot be spoofed from the internet. The proxy image is version-and-digest
+pinned, and both proxy creates and updates wait for readiness.
 
 ## Migrations
 

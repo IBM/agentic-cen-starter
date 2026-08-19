@@ -40,7 +40,7 @@ cp .env.production.example .env.production   # fill in DATABASE_URL and the valu
                                              # URL-dependent values on their example values
 
 # 2. One command
-./deploy/ce-deploy.sh -p <project>           # -g <resource-group>, -r <registry-namespace>
+./deploy/ce-deploy.sh -p <project>           # -g <resource-group>, --region <region>, -r <registry-namespace>
 ```
 
 First run: expect the cloud-side build to take a few minutes, and on the base flavor a
@@ -48,6 +48,9 @@ placeholder `BETTER_AUTH_URL` is seeded so the first revision can boot — the s
 the real URL and rolls a fresh revision before it exits. On the oauth-proxy flavor the
 script also deploys an `oauth2-proxy` front app and makes the main app project-only
 (identity headers can't be spoofed from the internet); the URL to share is the proxy's.
+The deployer waits for project and application readiness, reconciles scaling and health
+probes on every run, reuses an existing registry secret without an API key, and rotates that
+secret when an API key is supplied.
 
 ## Verify — before telling the user it's live
 

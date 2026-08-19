@@ -32,7 +32,7 @@ services:
       - ./dev/dex/config.yaml:/etc/dex/config.docker.yaml:ro,Z
 
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
     command:
       - --http-address=0.0.0.0:4180
       - --provider=oidc
