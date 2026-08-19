@@ -35,6 +35,20 @@ Things that happen automatically so you don't handle them:
 - A reachable PostgreSQL — typically IBM Cloud Databases for PostgreSQL; its connection
   string in `DATABASE_URL`. Code Engine has no in-cluster database convention: the script
   refuses to deploy without `DATABASE_URL`.
+- **Database TLS.** IBM Cloud Databases issues certificates from its own private CA, and
+  node-postgres verifies by default, so ICD's own copy-paste connection string fails at boot
+  with `SELF_SIGNED_CERT_IN_CHAIN`. Keep `sslmode=verify-full` and set `DATABASE_CA_CERT`
+  (`ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem`, then
+  `base64 -i icd-ca.pem | tr -d '\n'`). `sslmode=no-verify` also connects but leaves the
+  server unauthenticated — offer it as a demo shortcut the user opts into, never silently.
+  The deploy script preflights this and prints both options.
+- **An empty database.** Migrations run at boot. If the database already contains the app's
+  tables — a reused instance, or another deployment of the same app — boot fails with
+  `relation "..." already exists`. Ask for an empty database or schema. Never hand-insert rows
+  into `drizzle.__drizzle_migrations` to silence it: Drizzle skips a migration only when that
+  table's newest `created_at` is `>=` the `when` value in
+  `backend/src/db/migrations/meta/_journal.json`, so guessed values fail again on the next boot,
+  and the table lives in the `drizzle` schema, not `public`.
 
 If `.env.production` is absent, run the deploy command once: it creates the file from the
 example with mode `0600` and exits before any cloud mutation. Tell the user which placeholder
@@ -69,6 +83,15 @@ placeholder `BETTER_AUTH_URL` is seeded so the first revision can boot — the s
 the real URL and rolls a fresh revision before it exits. On the oauth-proxy flavor the
 script also deploys an `oauth2-proxy` front app and makes the main app project-only
 (identity headers can't be spoofed from the internet); the URL to share is the proxy's.
+
+The IdP is IBM App ID unless the user says otherwise. `OAUTH2_PROXY_PROVIDER` is **always
+`oidc`** — oauth2-proxy has no `ibm` or `appid` provider, so do not invent one. The issuer is
+`https://<region>.appid.cloud.ibm.com/oauth/v4/<tenantId>`, and the client id/secret come from
+the App ID instance. The Dex issuer in `docker-compose.yml` is local development only — never
+put it in `.env.production` or suggest it "for a demo". After deploying, the printed
+`/oauth2/callback` URL must be registered in App ID under Manage Authentication → redirect URIs,
+or login fails at the redirect.
+
 The deployer waits for project and application readiness, reconciles scaling and health
 probes on every run, reuses an existing registry secret without an API key, and rotates that
 secret when an API key is supplied.

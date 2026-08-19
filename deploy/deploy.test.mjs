@@ -180,6 +180,72 @@ test("Code Engine creates a private production env template before cloud access"
   assert.equal((await stat(path.join(directory, ".env.production"))).mode & 0o777, 0o600);
 });
 
+test("Code Engine refuses an IBM Cloud Databases URL without a CA or an explicit opt-out", async (t) => {
+  // The no-database flavor removes the DATABASE_URL handling this preflight lives in.
+  const ceScript = await readFile(path.join(root, "deploy/ce-deploy.sh"), "utf8");
+  if (!ceScript.includes("DATABASE_CA_CERT")) {
+    t.skip("flavor has no database");
+    return;
+  }
+
+  const fixture = await createCodeEngineFixture(t);
+  await writeFile(
+    path.join(fixture.directory, ".env.production"),
+    [
+      "DATABASE_URL=postgres://app:password@host.databases.appdomain.cloud:32000/ibmclouddb?sslmode=verify-full",
+      "DATABASE_CA_CERT=",
+      "BETTER_AUTH_SECRET=test-secret-with-at-least-32-characters",
+      "BETTER_AUTH_URL=https://cen-starter.example.com",
+      "export IAM_API_KEY=cloud-key-must-not-reach-the-app",
+      "",
+    ].join("\n"),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /DATABASE_CA_CERT is empty/);
+  assert.match(output, /deployment-cacert/);
+  assert.match(output, /no-verify/);
+  assert.doesNotMatch(await readFile(fixture.ibmcloudLog, "utf8"), /ce application/);
+});
+
+test("Code Engine accepts an IBM Cloud Databases URL once a CA is configured", async (t) => {
+  // The no-database flavor removes the DATABASE_URL handling this preflight lives in.
+  const ceScript = await readFile(path.join(root, "deploy/ce-deploy.sh"), "utf8");
+  if (!ceScript.includes("DATABASE_CA_CERT")) {
+    t.skip("flavor has no database");
+    return;
+  }
+
+  const fixture = await createCodeEngineFixture(t);
+  await writeFile(
+    path.join(fixture.directory, ".env.production"),
+    [
+      "DATABASE_URL=postgres://app:password@host.databases.appdomain.cloud:32000/ibmclouddb?sslmode=verify-full",
+      "DATABASE_CA_CERT=cGxhY2Vob2xkZXI=",
+      "BETTER_AUTH_SECRET=test-secret-with-at-least-32-characters",
+      "BETTER_AUTH_URL=https://cen-starter.example.com",
+      "export IAM_API_KEY=cloud-key-must-not-reach-the-app",
+      "",
+    ].join("\n"),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+
+  assert.equal(result.status, 0, `${result.stdout ?? ""}${result.stderr ?? ""}`);
+  assert.match(await readFile(fixture.appEnv, "utf8"), /DATABASE_CA_CERT=cGxhY2Vob2xkZXI=/);
+});
+
 test("Code Engine update reuses credentials and fully reconciles the application", async (t) => {
   const fixture = await createCodeEngineFixture(t, { existing: true, includeApiKey: false });
   const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {

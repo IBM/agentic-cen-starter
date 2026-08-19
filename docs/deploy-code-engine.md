@@ -26,8 +26,31 @@ Docker locally. Reference details: [deploy/README.md](../deploy/README.md).
    Grab its connection string for `DATABASE_URL`. (Code Engine has no in-cluster database
    option — the script requires `DATABASE_URL` and tells you if it's missing.)
 
+   Use an **empty** database. Migrations run at boot, so an instance that already holds the
+   app's tables fails with `relation "..." already exists`.
+
 You do **not** need to create the Code Engine project, the registry namespace, or the
 registry secret — the script creates whatever is missing.
+
+### Database TLS
+
+IBM Cloud Databases issues certificates from its own private CA (`CN=IBM Cloud Databases`),
+not a public one. `pg` verifies certificates by default, so the connection string ICD gives
+you fails at boot with `SELF_SIGNED_CERT_IN_CHAIN`. Export the CA and keep verification on:
+
+```bash
+ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem
+base64 -i icd-ca.pem | tr -d '\n'      # paste into DATABASE_CA_CERT
+```
+
+Keep `sslmode=verify-full` in `DATABASE_URL`; the CA in `DATABASE_CA_CERT` takes precedence
+over any SSL parameters in the URL. The certificate's SANs include the connection hostname, so
+full verification succeeds.
+
+The alternative is `sslmode=no-verify`, which encrypts the connection but does not authenticate
+the server, leaving it open to interception between Code Engine and the database. It's a demo
+shortcut, not a default. The deploy script refuses to run against an ICD host with neither
+configured, and prints both options.
 
 ## Configure production values
 
@@ -36,9 +59,14 @@ command creates it from the example with mode `0600` and exits before changing I
 Fill it locally and rerun; never commit it or paste its contents into chat.
 
 - `DATABASE_URL` — the connection string from above.
+- `DATABASE_CA_CERT` — see [Database TLS](#database-tls) above.
 - Secrets you own — `BETTER_AUTH_SECRET` (`openssl rand -hex 32`), or on the oauth-proxy
   flavor the IdP client values (`OAUTH2_PROXY_OIDC_ISSUER_URL`, `OAUTH2_PROXY_CLIENT_ID`,
-  `OAUTH2_PROXY_CLIENT_SECRET`).
+  `OAUTH2_PROXY_CLIENT_SECRET`). The IdP is normally IBM App ID: the issuer is
+  `https://<region>.appid.cloud.ibm.com/oauth/v4/<tenantId>` and `OAUTH2_PROXY_PROVIDER` stays
+  `oidc` — oauth2-proxy has no `ibm`/`appid` provider. The Dex setup in `docker-compose.yml` is
+  local development only. Register the printed `/oauth2/callback` URL in App ID under Manage
+  Authentication → redirect URIs.
 - URL-dependent values — **leave them on the example values.** The script reads the real
   app URL from Code Engine and injects them into the app secret itself (`BETTER_AUTH_URL`;
   on the oauth-proxy flavor `OAUTH2_PROXY_REDIRECT_URL`, `OAUTH2_PROXY_UPSTREAMS`, and a

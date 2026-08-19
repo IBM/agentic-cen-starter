@@ -326,12 +326,41 @@ ensure_registry_secret() {
 }
 
 require_database_url() {
+  local ca_cert=""
+  local sslmode=""
+
   database_url=$(env_file_value DATABASE_URL "$ENV_FILE" || true)
 
   if [[ -z "$database_url" ]]; then
     error "DATABASE_URL is missing or empty in $ENV_FILE; provision IBM Cloud Databases for PostgreSQL and add its connection string"
     exit 1
   fi
+
+  # IBM Cloud Databases issues certificates from its own private CA, and node-postgres verifies
+  # by default. Without a CA the container dies at boot with SELF_SIGNED_CERT_IN_CHAIN, which
+  # reads like an application bug. Catch it here, before anything is built or deployed.
+  [[ "$database_url" == *databases.appdomain.cloud* ]] || return 0
+
+  ca_cert=$(env_file_value DATABASE_CA_CERT "$ENV_FILE" || true)
+  [[ -z "$ca_cert" ]] || return 0
+
+  sslmode=$(printf '%s' "$database_url" | sed -n 's/.*[?&]sslmode=\([^&]*\).*/\1/p')
+  case "$sslmode" in
+    no-verify | disable)
+      warning "DATABASE_URL uses sslmode=$sslmode: the connection is encrypted but the server is not authenticated. Set DATABASE_CA_CERT to verify it."
+      return 0
+      ;;
+  esac
+
+  error "DATABASE_URL points at IBM Cloud Databases with sslmode=${sslmode:-<unset>}, but DATABASE_CA_CERT is empty in $ENV_FILE."
+  error "IBM Cloud Databases uses a private CA, so the app would fail to boot with SELF_SIGNED_CERT_IN_CHAIN."
+  error "Pick one:"
+  error "  1. Verify the certificate (recommended). Export the CA and put it in DATABASE_CA_CERT:"
+  error "       ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem"
+  error "       base64 -i icd-ca.pem | tr -d '\n'"
+  error "  2. Skip verification (encrypted, unauthenticated; demos only):"
+  error "       change sslmode to no-verify in DATABASE_URL."
+  exit 1
 }
 
 application_url() {

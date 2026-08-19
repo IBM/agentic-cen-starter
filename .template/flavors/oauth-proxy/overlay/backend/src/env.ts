@@ -12,6 +12,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().optional(),
   WEB_PORT: z.coerce.number().int().default(5173),
   DATABASE_URL: z.url(),
+  DATABASE_CA_CERT: z.string().optional(),
   MIGRATE_ON_START: z.enum(["true", "false"]).optional(),
 });
 
