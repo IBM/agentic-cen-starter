@@ -208,6 +208,13 @@ parse_args() {
 }
 
 check_preconditions() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    cp .env.production.example "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+    error "created $ENV_FILE from .env.production.example; fill in the required values locally, then rerun this command"
+    exit 1
+  fi
+
   need_command ibmcloud
 
   if ! ibmcloud plugin show code-engine >/dev/null 2>&1; then
@@ -234,10 +241,6 @@ check_preconditions() {
     fi
   fi
 
-  if [[ ! -f "$ENV_FILE" ]]; then
-    error "$ENV_FILE is missing; create it from .env.production.example"
-    exit 1
-  fi
 }
 
 target_resource_group() {
@@ -477,7 +480,7 @@ finalize_derived_urls() {
   update_app_secret
   for application_name in "${derived_app_names[@]}"; do
     info "Starting a new '$application_name' revision with the derived environment values."
-    ibmcloud ce application update --name "$application_name"
+    ibmcloud ce application update --name "$application_name" --wait --wait-timeout 600
   done
 }
 

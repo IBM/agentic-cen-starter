@@ -28,14 +28,22 @@ ibmcloud ce revision list --app <app>     # is the latest revision Ready or stuc
   prints the exact missing/malformed variable on boot (`app logs` shows it); fix the secret
   (`ibmcloud ce secret update`) and `ibmcloud ce app update` to roll a new revision.
 - **Build fails** (when building via CE): `ibmcloud ce buildrun list` →
-  `ibmcloud ce buildrun logs --name <run>`. Check Dockerfile path and registry access.
+  `ibmcloud ce buildrun logs --name <run>`. Check Dockerfile path, registry access, and that
+  `.ceignore` excludes pnpm workspace symlinks and local dependencies. `--build-source .`
+  uploads a filtered local archive; it does not clone the Git remote.
+- **oauth2-proxy authenticates, then returns 502** — keep the main app project-only and inspect
+  the proxy revision arguments plus its upstream mapping. The generated deployment must use
+  the cluster-local URL with a trailing slash and `--pass-host-header=false`; do not make the
+  main app public as a workaround.
 - **App works, then 502s after idle** — min-scale 0 cold starts; check
   `ibmcloud ce app get` for `minScale` and raise to 1 if cold starts are unacceptable.
 - **Crashes under load** — memory/CPU too low; CE only allows certain CPU-memory combos
   (`ibmcloud ce app update --cpu … --memory …`).
 - **Secrets/config not arriving** — confirm the app references them:
   `app get` shows `--env-from-secret` bindings; a secret updated *after* the revision was
-  created needs an `app update` to take effect.
+  created needs an `app update` to take effect. Prefer correcting `.env.production` and
+  rerunning `deploy/ce-deploy.sh`; do not upload the raw file directly because deployment-only
+  credentials are filtered by the script.
 
 ## Discipline
 

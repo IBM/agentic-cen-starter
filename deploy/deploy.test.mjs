@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { access, chmod, cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -138,6 +138,46 @@ test("Code Engine fresh deploy targets explicitly and reconciles health settings
     appEnv,
     /(?:BETTER_AUTH_URL=https:\/\/cen-starter\.test\.eu-de\.codeengine\.appdomain\.cloud|OAUTH2_PROXY_REDIRECT_URL=https:\/\/cen-starter-oauth-proxy\.test\.eu-de\.codeengine\.appdomain\.cloud\/oauth2\/callback)/,
   );
+
+  if (visibility === "project") {
+    assert.match(
+      log,
+      /ce application (?:create|update) --name cen-starter-oauth-proxy .*--argument=--pass-host-header=false/,
+    );
+    assert.match(
+      appEnv,
+      /OAUTH2_PROXY_UPSTREAMS=http:\/\/cen-starter\.test\.svc\.cluster\.local\//,
+    );
+  }
+  assert.match(
+    log,
+    /ce application update --name cen-starter(?:-oauth-proxy)? --wait --wait-timeout 600/,
+  );
+});
+
+test("Code Engine creates a private production env template before cloud access", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "cen-ce-env-test-"));
+  t.after(async () => {
+    const { rm } = await import("node:fs/promises");
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  await cp(path.join(root, "deploy"), path.join(directory, "deploy"), { recursive: true });
+  await cp(
+    path.join(root, ".env.production.example"),
+    path.join(directory, ".env.production.example"),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: directory,
+    encoding: "utf8",
+    env: { ...process.env, PATH: "/usr/bin:/bin" },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /created \.env\.production from \.env\.production\.example/);
+  assert.equal((await stat(path.join(directory, ".env.production"))).mode & 0o777, 0o600);
 });
 
 test("Code Engine update reuses credentials and fully reconciles the application", async (t) => {

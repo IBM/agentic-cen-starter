@@ -4,6 +4,27 @@ packages:
   - shared
 
 allowBuilds:
+  '@carbon/colors': true
+  '@carbon/feature-flags': true
+  '@carbon/grid': true
+  '@carbon/icon-helpers': true
+  '@carbon/icons-react': true
+  '@carbon/layout': true
+  '@carbon/motion': true
+  '@carbon/react': true
+  '@carbon/styles': true
+  '@carbon/themes': true
+  '@carbon/type': true
+  '@carbon/utilities': true
+  '@ibm/plex': true
+  '@ibm/plex-mono': true
+  '@ibm/plex-sans': true
+  '@ibm/plex-sans-arabic': true
+  '@ibm/plex-sans-devanagari': true
+  '@ibm/plex-sans-hebrew': true
+  '@ibm/plex-sans-thai': true
+  '@ibm/plex-sans-thai-looped': true
+  '@ibm/plex-serif': true
   esbuild: true
 
 catalog:
@@ -69,6 +90,3 @@ minimumReleaseAgeExclude:
   - '@rolldown/binding-win32-x64-msvc@1.1.5'
   - electron-to-chromium@1.5.389
   - rolldown@1.1.5
-
-onlyBuiltDependencies:
-  - esbuild

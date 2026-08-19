@@ -31,9 +31,9 @@ registry secret — the script creates whatever is missing.
 
 ## Configure production values
 
-```bash
-cp .env.production.example .env.production    # never commit this file
-```
+Run `./deploy/ce-deploy.sh -p <project-name>` once. When `.env.production` is absent, the
+command creates it from the example with mode `0600` and exits before changing IBM Cloud.
+Fill it locally and rerun; never commit it or paste its contents into chat.
 
 - `DATABASE_URL` — the connection string from above.
 - Secrets you own — `BETTER_AUTH_SECRET` (`openssl rand -hex 32`), or on the oauth-proxy
@@ -45,8 +45,10 @@ cp .env.production.example .env.production    # never commit this file
   generated-once `OAUTH2_PROXY_COOKIE_SECRET`). Every derived value is printed in the
   deploy summary.
 - `IAM_API_KEY` — only needed the very first time, so the script can create the registry
-  secret. Create one under [API keys](https://cloud.ibm.com/iam/apikeys); put it in
-  `.env.production` (it never reaches the app) or export `IBMCLOUD_API_KEY` instead.
+  secret. Use an existing key from [API keys](https://cloud.ibm.com/iam/apikeys), or ask your
+  agent to create a clearly named, dedicated deployment key. The agent must ask before creating
+  it and save it locally without displaying it. Put an existing key in `.env.production` (it
+  never reaches the app) or export `IBMCLOUD_API_KEY` instead.
 
 ## Deploy
 

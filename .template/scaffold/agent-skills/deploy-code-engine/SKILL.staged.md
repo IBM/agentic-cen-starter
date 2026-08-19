@@ -6,14 +6,19 @@ description: Deploy this app to IBM Cloud Code Engine — one-command cloud-side
 # Deploy to IBM Cloud Code Engine
 
 Same single container as everywhere else (API + SPA, port 8080), run as a Code Engine app.
-The entry point is `deploy/ce-deploy.sh` — idempotent, safe to rerun, builds the image in
-the cloud from the working tree (no local Docker). Details: `deploy/README.md`.
+The entry point is `deploy/ce-deploy.sh` — idempotent, safe to rerun, and builds the image in
+Code Engine from a filtered archive of the local working tree (no Git remote and no local
+Docker). Details: `deploy/README.md`.
 
 Things that happen automatically so you don't handle them:
 
 - **Project, registry namespace, registry secret**: created if missing. The registry secret
-  needs an IAM API key the first time — `IBMCLOUD_API_KEY` in the environment or
-  `IAM_API_KEY=` in `.env.production` (the script keeps it out of the app secret).
+  needs an existing IAM API key the first time — prefer `IBMCLOUD_API_KEY` in the command
+  environment. If none is available, explain why it is needed and ask whether the user wants
+  to provide an existing key locally or have you create a dedicated deployment key. Key creation
+  is an external credential mutation: never do it without explicit approval, never ask the user
+  to paste a key into chat, and store a created value directly in the ignored mode-`0600`
+  `.env.production` without displaying it. The script keeps it out of the app secret.
 - **Migrations**: the image migrates its own schema at boot (`MIGRATE_ON_START`, production
   default, advisory-locked). No manual step.
 - **URL-dependent env**: the script reads the real app URL from Code Engine and injects
@@ -22,7 +27,7 @@ Things that happen automatically so you don't handle them:
   generated-once cookie secret. `.env.production` is never modified; explicit values there
   override derivation.
 
-## Preconditions (ask the user, don't guess)
+## Preconditions (inspect safely; never collect secrets in chat)
 
 - `ibmcloud` CLI with `code-engine` + `container-registry` plugins, logged in
   (`ibmcloud login --sso` is interactive — the user runs it, not you), resource group
@@ -31,19 +36,35 @@ Things that happen automatically so you don't handle them:
   string in `DATABASE_URL`. Code Engine has no in-cluster database convention: the script
   refuses to deploy without `DATABASE_URL`.
 
+If `.env.production` is absent, run the deploy command once: it creates the file from the
+example with mode `0600` and exits before any cloud mutation. Tell the user which placeholder
+keys to replace in that local file. Do not ask them to send values to you, print the file, or
+read secret values back into the conversation.
+
+Before the first registry-secret creation, check for a configured key without printing its
+value. If it is absent, offer to create a clearly named, dedicated IBM Cloud API key. Wait for
+explicit approval, then create and save it without emitting the credential; otherwise let the
+user configure an existing key locally. Reuse an existing Code Engine registry secret on later
+deployments rather than creating another key.
+
+Before publishing, run `pnpm verify` and inspect `git status --short`. The cloud build archives
+local files rather than cloning Git, so commit the intended code first as normal release
+hygiene. Ask before creating the commit. Refuse an accidental dirty-tree deploy; allow it only
+when the user explicitly requests a diagnostic deployment of uncommitted work.
+
 ## Deploy — first time and every time
 
 ```bash
-# 1. Production env — never commit this file
-cp .env.production.example .env.production   # fill in DATABASE_URL and the values only you
-                                             # can know (secrets, IdP client config); leave
-                                             # URL-dependent values on their example values
+# 1. Production env — never commit or paste this file into chat. Running the deploy command
+#    creates it and stops when it is absent; fill in DATABASE_URL and IdP secrets locally.
 
 # 2. One command
 ./deploy/ce-deploy.sh -p <project>           # -g <resource-group>, --region <region>, -r <registry-namespace>
 ```
 
-First run: expect the cloud-side build to take a few minutes, and on the base flavor a
+The repository's `.ceignore` excludes dependencies, build output, local environment files,
+agent metadata, and template internals from the source archive. First run: expect the
+cloud-side build to take a few minutes, and on the base flavor a
 placeholder `BETTER_AUTH_URL` is seeded so the first revision can boot — the script swaps in
 the real URL and rolls a fresh revision before it exits. On the oauth-proxy flavor the
 script also deploys an `oauth2-proxy` front app and makes the main app project-only
