@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Code Engine builds get a 30-minute timeout (`--build-timeout 1800`) instead of the
+  600-second default, which the very first build in a fresh project can exceed — cold build
+  infrastructure provisioning counts against it, and hitting it failed the deploy with
+  "Zeitlimitüberschreitung"/timeout even though nothing was wrong.
 - Database TLS works against IBM Cloud Databases out of the box: the example `DATABASE_URL`
   uses `sslmode=no-verify` (ICD's private CA fails node-postgres verification), with optional
   `DATABASE_CA_CERT` for real verification. `ce-deploy.sh` preflights the broken combination.

@@ -96,6 +96,10 @@ and rolls a fresh revision with them. On the oauth-proxy flavor it also deploys 
 `oauth2-proxy` front app and switches the main app to project-only visibility, so identity
 headers can't be spoofed from the internet — the URL you share is the proxy's.
 
+The very first build in a fresh project is slow (~10 minutes): provisioning the build
+infrastructure counts too, which is why the script raises the build timeout to 30 minutes.
+Every build after that takes a few minutes.
+
 Flags: `-g <resource-group>` to target one, `-r <registry-namespace>` to override the
 default (derived from the project name; ICR namespaces are account-global), and
 `--region <region>` to select the Code Engine region explicitly.

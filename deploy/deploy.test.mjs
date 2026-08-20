@@ -130,6 +130,7 @@ test("Code Engine fresh deploy targets explicitly and reconciles health settings
   assert.match(log, /--probe-live initial-delay=10/);
   assert.match(log, /--probe-live interval=10/);
   assert.match(log, /--probe-ready path=\/api\/health/);
+  assert.match(log, /--build-timeout 1800/);
   assert.match(log, /--wait-timeout 1200/);
 
   const appEnv = await readFile(fixture.appEnv, "utf8");

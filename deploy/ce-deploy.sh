@@ -481,6 +481,7 @@ ensure_application() {
   arguments=(application "$action" --name "$APP_NAME" \
     --build-source . \
     --build-dockerfile deploy/Dockerfile \
+    --build-timeout 1800 \
     --registry-secret "$REGISTRY_SECRET" \
     --port http1:8080 \
     --env-from-secret "$APP_SECRET" \
