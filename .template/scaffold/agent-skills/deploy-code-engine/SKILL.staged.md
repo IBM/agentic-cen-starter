@@ -13,12 +13,11 @@ Docker). Details: `deploy/README.md`.
 Things that happen automatically so you don't handle them:
 
 - **Project, registry namespace, registry secret**: created if missing. The registry secret
-  needs an existing IAM API key the first time — prefer `IBMCLOUD_API_KEY` in the command
-  environment. If none is available, explain why it is needed and ask whether the user wants
-  to provide an existing key locally or have you create a dedicated deployment key. Key creation
-  is an external credential mutation: never do it without explicit approval, never ask the user
-  to paste a key into chat, and store a created value directly in the ignored mode-`0600`
-  `.env.production` without displaying it. The script keeps it out of the app secret.
+  needs an IAM API key the first time. Ask for approval, then run
+  `./deploy/create-deploy-key.sh` — it creates a dedicated key and stores it in the ignored
+  mode-`0600` `.env.production` without ever printing it. Never create a key another way,
+  never ask the user to paste a key into chat, and never read the stored value back. The
+  script keeps it out of the app secret.
 - **Migrations**: the image migrates its own schema at boot (`MIGRATE_ON_START`, production
   default, advisory-locked). No manual step.
 - **URL-dependent env**: the script reads the real app URL from Code Engine and injects
@@ -46,15 +45,17 @@ Things that happen automatically so you don't handle them:
   schema, not `public`).
 
 If `.env.production` is absent, run the deploy command once: it creates the file from the
-example with mode `0600` and exits before any cloud mutation. Tell the user which placeholder
+example with mode `0600` and exits before any cloud mutation. On later runs the script
+validates the whole file up front and lists every missing or example value in one error —
+relay the complete list to the user in a single message instead of fixing one item per run. Tell the user which placeholder
 keys to replace in that local file. Do not ask them to send values to you, print the file, or
 read secret values back into the conversation.
 
 Before the first registry-secret creation, check for a configured key without printing its
-value. If it is absent, offer to create a clearly named, dedicated IBM Cloud API key. Wait for
-explicit approval, then create and save it without emitting the credential; otherwise let the
-user configure an existing key locally. Reuse an existing Code Engine registry secret on later
-deployments rather than creating another key.
+value. If it is absent, offer to create one; on approval run `./deploy/create-deploy-key.sh`
+(it never emits the credential). Otherwise let the user configure an existing key locally.
+Reuse an existing Code Engine registry secret on later deployments rather than creating
+another key.
 
 Before publishing, run `pnpm verify` and inspect `git status --short`. The cloud build archives
 local files rather than cloning Git, so commit the intended code first as normal release

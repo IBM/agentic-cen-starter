@@ -314,7 +314,7 @@ ensure_registry_secret() {
   fi
 
   if ! api_key=$(configured_iam_api_key); then
-    error "creating registry secret '$REGISTRY_SECRET' requires IBMCLOUD_API_KEY; set it in the environment or add IAM_API_KEY=... to $ENV_FILE"
+    error "creating registry secret '$REGISTRY_SECRET' requires an IBM Cloud API key; run ./deploy/create-deploy-key.sh to create and store one without displaying it, or set IBMCLOUD_API_KEY / IAM_API_KEY"
     exit 1
   fi
   info "Creating Code Engine registry secret '$REGISTRY_SECRET'."
@@ -325,37 +325,54 @@ ensure_registry_secret() {
     --password "$api_key"
 }
 
-require_database_url() {
+validation_problems=()
+
+# Flavors extend production-env validation here (the oauth-proxy flavor checks IdP values).
+validate_flavor_env() {
+  :
+}
+
+validate_production_env() {
   local ca_cert=""
   local sslmode=""
+  local problem=""
+  local index=1
 
   database_url=$(env_file_value DATABASE_URL "$ENV_FILE" || true)
 
-  if [[ -z "$database_url" ]]; then
-    error "DATABASE_URL is missing or empty in $ENV_FILE; provision IBM Cloud Databases for PostgreSQL and add its connection string"
-    exit 1
+  if [[ -z "$database_url" || "$database_url" == "postgres://USER:PASSWORD@HOST"* ]]; then
+    validation_problems+=("DATABASE_URL is missing or still the example value; set a PostgreSQL connection string reachable from Code Engine (IBM Cloud Databases for PostgreSQL is the usual choice).")
+  elif [[ "$database_url" == *databases.appdomain.cloud* ]]; then
+    # IBM Cloud Databases uses a private CA and node-postgres verifies by default, so a
+    # verifying sslmode without a CA dies at boot with SELF_SIGNED_CERT_IN_CHAIN.
+    ca_cert=$(env_file_value DATABASE_CA_CERT "$ENV_FILE" || true)
+    if [[ -z "$ca_cert" ]]; then
+      sslmode=$(printf '%s' "$database_url" | sed -n 's/.*[?&]sslmode=\([^&]*\).*/\1/p')
+      case "$sslmode" in
+        no-verify | disable) ;;
+        *)
+          validation_problems+=("DATABASE_URL points at IBM Cloud Databases with sslmode=${sslmode:-<unset>} but DATABASE_CA_CERT is empty, so the app would fail to boot with SELF_SIGNED_CERT_IN_CHAIN. Either change sslmode to no-verify (encrypted, server not verified), or keep it and set DATABASE_CA_CERT: ibmcloud cdb deployment-cacert ICD_INSTANCE_NAME > icd-ca.pem && base64 < icd-ca.pem | tr -d '\n' (replace ICD_INSTANCE_NAME; list instances with: ibmcloud resource service-instances --service-name databases-for-postgresql).")
+          ;;
+      esac
+    fi
   fi
 
-  # IBM Cloud Databases issues certificates from its own private CA, and node-postgres verifies
-  # by default. Without a CA the container dies at boot with SELF_SIGNED_CERT_IN_CHAIN, which
-  # reads like an application bug. Catch it here, before anything is built or deployed.
-  [[ "$database_url" == *databases.appdomain.cloud* ]] || return 0
+  validate_flavor_env
 
-  ca_cert=$(env_file_value DATABASE_CA_CERT "$ENV_FILE" || true)
-  [[ -z "$ca_cert" ]] || return 0
+  if ((${#validation_problems[@]} == 0)); then
+    return 0
+  fi
 
-  sslmode=$(printf '%s' "$database_url" | sed -n 's/.*[?&]sslmode=\([^&]*\).*/\1/p')
-  case "$sslmode" in
-    no-verify | disable) return 0 ;;
-  esac
-
-  error "DATABASE_URL points at IBM Cloud Databases with sslmode=${sslmode:-<unset>}, but DATABASE_CA_CERT is empty in $ENV_FILE."
-  error "IBM Cloud Databases uses a private CA, so the app would fail to boot with SELF_SIGNED_CERT_IN_CHAIN. Either:"
-  error "  - change sslmode to no-verify in DATABASE_URL (encrypted, server not verified), or"
-  error "  - keep sslmode=$sslmode and set DATABASE_CA_CERT (replace ICD_INSTANCE_NAME first;"
-  error "    list instances with: ibmcloud resource service-instances --service-name databases-for-postgresql):"
-  error "      ibmcloud cdb deployment-cacert ICD_INSTANCE_NAME > icd-ca.pem"
-  error "      base64 < icd-ca.pem | tr -d '\n'"
+  error "$ENV_FILE is not ready to deploy:"
+  for problem in "${validation_problems[@]}"; do
+    error "  ${index}. $problem"
+    index=$((index + 1))
+  done
+  if ! configured_iam_api_key >/dev/null; then
+    error "note: the first deploy also needs an IBM Cloud API key to create the registry secret."
+    error "      Run ./deploy/create-deploy-key.sh to create and store one without displaying it,"
+    error "      or configure IBMCLOUD_API_KEY / IAM_API_KEY. Later deploys reuse the secret."
+  fi
   exit 1
 }
 
@@ -537,11 +554,11 @@ print_summary() {
 
 parse_args "$@"
 check_preconditions
+validate_production_env
 target_resource_group
 ensure_project
 ensure_registry_namespace
 ensure_registry_secret
-require_database_url
 create_app_secret
 ensure_application
 finalize_derived_urls

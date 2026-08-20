@@ -74,10 +74,12 @@ Fill it locally and rerun; never commit it or paste its contents into chat.
   generated-once `OAUTH2_PROXY_COOKIE_SECRET`). Every derived value is printed in the
   deploy summary.
 - `IAM_API_KEY` — only needed the very first time, so the script can create the registry
-  secret. Use an existing key from [API keys](https://cloud.ibm.com/iam/apikeys), or ask your
-  agent to create a clearly named, dedicated deployment key. The agent must ask before creating
-  it and save it locally without displaying it. Put an existing key in `.env.production` (it
-  never reaches the app) or export `IBMCLOUD_API_KEY` instead.
+  secret. Run `./deploy/create-deploy-key.sh` to create a dedicated key and store it here
+  without it ever being displayed, or use an existing key from
+  [API keys](https://cloud.ibm.com/iam/apikeys) / export `IBMCLOUD_API_KEY`. The value never
+  reaches the app.
+- On the oauth-proxy flavor, fixed proxy settings (provider, ports, cookie flags) are injected
+  by the deploy scripts — `.env.production` holds only values you own.
 
 ## Deploy
 
