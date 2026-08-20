@@ -299,6 +299,40 @@ test("Code Engine derives oauth2-proxy values from an App ID credentials file", 
   assert.match(output, /OAUTH2_PROXY_CLIENT_SECRET=<from \.secrets\/appid-credentials\.json>/);
 });
 
+test("Code Engine refuses to deploy example-value OAuth credentials", async (t) => {
+  try {
+    await access(path.join(root, "deploy/appid-credentials.mjs"));
+  } catch {
+    t.skip("flavor has no App ID credentials helper");
+    return;
+  }
+
+  const fixture = await createCodeEngineFixture(t);
+  await writeFile(
+    path.join(fixture.directory, ".env.production"),
+    [
+      "DATABASE_URL=postgres://app:password@postgres.example:5432/app",
+      "OAUTH2_PROXY_OIDC_ISSUER_URL=https://idp.example.com/oidc",
+      "OAUTH2_PROXY_PROVIDER=oidc",
+      "OAUTH2_PROXY_CLIENT_ID=replace-with-client-id",
+      "OAUTH2_PROXY_CLIENT_SECRET=replace-with-client-secret",
+      "export IAM_API_KEY=cloud-key-must-not-reach-the-app",
+      "",
+    ].join("\n"),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /still the example value/);
+  assert.match(output, /\.secrets\/appid-credentials\.json/);
+});
+
 test("Code Engine rejects an App ID credentials file for the wrong registration type", async (t) => {
   try {
     await access(path.join(root, "deploy/appid-credentials.mjs"));

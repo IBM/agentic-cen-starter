@@ -84,7 +84,8 @@ never through chat: create empty, gitignored `.secrets/appid-credentials.json`, 
 paste their App ID instance's **Service credentials** JSON into it verbatim (a "Regular web
 application" registration — single-page apps have no secret), and the deploy scripts derive
 `OAUTH2_PROXY_CLIENT_ID` / `OAUTH2_PROXY_CLIENT_SECRET` / `OAUTH2_PROXY_OIDC_ISSUER_URL` from it.
-Never read that file back into the conversation. `OAUTH2_PROXY_PROVIDER` is **always `oidc`** —
+Never read that file back into the conversation. The deploy refuses to run while the client
+values are still example values, so collect the file before deploying. `OAUTH2_PROXY_PROVIDER` is **always `oidc`** —
 oauth2-proxy has no `ibm` or `appid` provider, so do not invent one. The Dex issuer in
 `docker-compose.yml` is local development only — never put it in `.env.production` or suggest it
 "for a demo". After deploying, the printed `/oauth2/callback` URL must be registered in App ID
