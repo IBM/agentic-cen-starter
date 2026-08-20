@@ -886,12 +886,9 @@ if [[ "$*" == plugin\ show\ * ]]; then exit 0; fi
 if [[ "$*" == "account show" ]]; then exit 0; fi
 if [[ "$1" == target ]]; then exit 0; fi
 
-if [[ "$*" == "ce project get --name test-project --output json" ]]; then
-  if [[ -f "$MOCK_STATE/project-created" ]]; then
-    printf '{"extensions":{"virtual_private_endpoints":{"dns_domain":"test.private.eu-de.codeengine.appdomain.cloud"}}}\n'
-    exit 0
-  fi
-  exit 1
+if [[ "$*" == "ce project current --output json" ]]; then
+  printf '{"name":"test-project","kube_config_context":"test","domain":"eu-de.codeengine.appdomain.cloud"}\n'
+  exit 0
 fi
 if [[ "$*" == "ce project get --name test-project" ]]; then
   [[ -f "$MOCK_STATE/project-created" ]]
