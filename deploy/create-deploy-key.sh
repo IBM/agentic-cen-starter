@@ -5,8 +5,35 @@
 set -euo pipefail
 
 ENV_FILE=".env.production"
-key_name="${1:-$(basename "$PWD")-deploy}"
+rotate="false"
+key_name=""
+for arg in "$@"; do
+  case "$arg" in
+    --rotate) rotate="true" ;;
+    *) key_name="$arg" ;;
+  esac
+done
+if [[ -z "$key_name" ]]; then
+  key_name="$(basename "$PWD")-deploy"
+fi
 temp_file=""
+
+# One key is enough: rerunning this script must not mint another one. IBM Cloud allows
+# duplicate key names, so every extra run would create an extra key that nobody tracks.
+existing_key=$(sed -n 's/^\(export \)\{0,1\}IAM_API_KEY=//p' "$ENV_FILE" 2>/dev/null | head -n 1 || true)
+if [[ "$rotate" != "true" ]]; then
+  if [[ -n "$existing_key" ]]; then
+    printf 'A deployment API key is already stored in %s - not creating another one.\n' "$ENV_FILE"
+    printf 'The deploy script will use it as is. To replace it, rerun with --rotate\n'
+    printf '(then delete the old key: ibmcloud iam api-keys / ibmcloud iam api-key-delete NAME).\n'
+    exit 0
+  fi
+  if [[ -n "${IBMCLOUD_API_KEY:-}" ]]; then
+    printf 'IBMCLOUD_API_KEY is already exported in this shell - not creating another key.\n'
+    printf 'The deploy script will use it as is. To create a stored key anyway, rerun with --rotate.\n'
+    exit 0
+  fi
+fi
 
 cleanup() {
   if [[ -n "$temp_file" ]]; then

@@ -255,7 +255,7 @@ test("Code Engine accepts an IBM Cloud Databases URL once a CA is configured", a
 test("Code Engine derives oauth2-proxy values from an App ID credentials file", async (t) => {
   // Only the oauth-proxy flavor ships the helper.
   try {
-    await access(path.join(root, "deploy/appid-credentials.mjs"));
+    await access(path.join(root, "deploy/idp-credentials.mjs"));
   } catch {
     t.skip("flavor has no App ID credentials helper");
     return;
@@ -276,7 +276,7 @@ test("Code Engine derives oauth2-proxy values from an App ID credentials file", 
   );
   await mkdir(path.join(fixture.directory, ".secrets"));
   await writeFile(
-    path.join(fixture.directory, ".secrets/appid-credentials.json"),
+    path.join(fixture.directory, ".secrets/idp-credentials.json"),
     JSON.stringify({
       clientId: "client-id-from-file",
       secret: "secret-value-from-file",
@@ -302,12 +302,12 @@ test("Code Engine derives oauth2-proxy values from an App ID credentials file", 
   );
   // The secret must reach the app secret and nothing else.
   assert.doesNotMatch(output, /secret-value-from-file/);
-  assert.match(output, /OAUTH2_PROXY_CLIENT_SECRET=<from \.secrets\/appid-credentials\.json>/);
+  assert.match(output, /OAUTH2_PROXY_CLIENT_SECRET=<from \.secrets\/idp-credentials\.json>/);
 });
 
 test("Code Engine refuses to deploy example-value OAuth credentials", async (t) => {
   try {
-    await access(path.join(root, "deploy/appid-credentials.mjs"));
+    await access(path.join(root, "deploy/idp-credentials.mjs"));
   } catch {
     t.skip("flavor has no App ID credentials helper");
     return;
@@ -336,12 +336,15 @@ test("Code Engine refuses to deploy example-value OAuth credentials", async (t) 
 
   assert.notEqual(result.status, 0);
   assert.match(output, /still the example value/);
-  assert.match(output, /\.secrets\/appid-credentials\.json/);
+  assert.match(output, /\.secrets\/idp-credentials\.json/);
+  // The refusal creates the empty file so the user only has to paste into it.
+  const created = await stat(path.join(fixture.directory, ".secrets/idp-credentials.json"));
+  assert.equal(created.size, 0);
 });
 
 test("Code Engine rejects an App ID credentials file for the wrong registration type", async (t) => {
   try {
-    await access(path.join(root, "deploy/appid-credentials.mjs"));
+    await access(path.join(root, "deploy/idp-credentials.mjs"));
   } catch {
     t.skip("flavor has no App ID credentials helper");
     return;
@@ -350,7 +353,7 @@ test("Code Engine rejects an App ID credentials file for the wrong registration 
   const fixture = await createCodeEngineFixture(t);
   await mkdir(path.join(fixture.directory, ".secrets"));
   await writeFile(
-    path.join(fixture.directory, ".secrets/appid-credentials.json"),
+    path.join(fixture.directory, ".secrets/idp-credentials.json"),
     JSON.stringify({ clientId: "spa-client", type: "singlepageapp" }),
   );
 
@@ -402,6 +405,11 @@ test("Code Engine preflight reports every problem in one run", async (t) => {
   assert.match(output, /create-deploy-key\.sh/);
   // preflight runs before any cloud interaction
   assert.doesNotMatch(await readFile(fixture.ibmcloudLog, "utf8"), /ce (project|application)/);
+  // On the oauth flavor the preflight also creates the empty credentials file to paste into.
+  if (ceScript.includes(".secrets/idp-credentials.json")) {
+    const created = await stat(path.join(fixture.directory, ".secrets/idp-credentials.json"));
+    assert.equal(created.size, 0);
+  }
 });
 
 test("create-deploy-key stores the key without displaying it", async (t) => {
@@ -445,6 +453,20 @@ test("create-deploy-key stores the key without displaying it", async (t) => {
   assert.match(env, /IAM_API_KEY=secret-key-value-123/);
   assert.doesNotMatch(output, /secret-key-value-123/);
   assert.equal((await stat(path.join(directory, ".env.production"))).mode & 0o777, 0o600);
+
+  // Rerunning must not mint another key: same script, same mock, key already stored.
+  const rerun = spawnSync("bash", ["deploy/create-deploy-key.sh", "test-key"], {
+    cwd: directory,
+    encoding: "utf8",
+    env: { ...process.env, IBMCLOUD_API_KEY: "", PATH: `${bin}:${process.env.PATH}` },
+  });
+  const rerunOutput = `${rerun.stdout ?? ""}${rerun.stderr ?? ""}`;
+  assert.equal(rerun.status, 0, rerunOutput);
+  assert.match(rerunOutput, /already stored/);
+  assert.doesNotMatch(rerunOutput, /secret-key-value-123/);
+  const envAfterRerun = await readFile(path.join(directory, ".env.production"), "utf8");
+  assert.equal(envAfterRerun, env);
+  assert.equal(envAfterRerun.match(/^IAM_API_KEY=/gm).length, 1);
 });
 
 test("Code Engine update reuses credentials and fully reconciles the application", async (t) => {

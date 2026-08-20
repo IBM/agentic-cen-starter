@@ -15,9 +15,11 @@ Things that happen automatically so you don't handle them:
 - **Project, registry namespace, registry secret**: created if missing. The registry secret
   needs an IAM API key the first time. Ask for approval, then run
   `./deploy/create-deploy-key.sh` — it creates a dedicated key and stores it in the ignored
-  mode-`0600` `.env.production` without ever printing it. Never create a key another way,
-  never ask the user to paste a key into chat, and never read the stored value back. The
-  script keeps it out of the app secret.
+  mode-`0600` `.env.production` without ever printing it. Run it at most once: it refuses to
+  mint another key while one is stored (`--rotate` replaces it deliberately). Never create a
+  key another way — in particular never run `ibmcloud iam api-key-create` yourself — never
+  ask the user to paste a key into chat, and never read the stored value back. The script
+  keeps it out of the app secret.
 - **Migrations**: the image migrates its own schema at boot (`MIGRATE_ON_START`, production
   default, advisory-locked). No manual step.
 - **URL-dependent env**: the script reads the real app URL from Code Engine and injects
@@ -53,9 +55,10 @@ read secret values back into the conversation.
 
 Before the first registry-secret creation, check for a configured key without printing its
 value. If it is absent, offer to create one; on approval run `./deploy/create-deploy-key.sh`
-(it never emits the credential). Otherwise let the user configure an existing key locally.
-Reuse an existing Code Engine registry secret on later deployments rather than creating
-another key.
+(it never emits the credential, and rerunning it will not create duplicates). Otherwise let
+the user configure an existing key locally. Reuse an existing Code Engine registry secret on
+later deployments rather than creating another key, and never call
+`ibmcloud iam api-key-create` directly — every direct call mints a new untracked key.
 
 Before publishing, run `pnpm verify` and inspect `git status --short`. The cloud build archives
 local files rather than cloning Git, so commit the intended code first as normal release
@@ -81,12 +84,13 @@ script also deploys an `oauth2-proxy` front app and makes the main app project-o
 (identity headers can't be spoofed from the internet); the URL to share is the proxy's.
 
 The IdP is IBM App ID unless the user says otherwise. Collect its credentials through a file,
-never through chat: create empty, gitignored `.secrets/appid-credentials.json`, ask the user to
-paste their App ID instance's **Service credentials** JSON into it verbatim (a "Regular web
-application" registration — single-page apps have no secret), and the deploy scripts derive
+never through chat. The deploy preflight creates empty, gitignored `.secrets/idp-credentials.json`
+and refuses to run until it is filled in — relay its message and wait for the user to paste
+**either** their App ID instance's **Service credentials** JSON verbatim (a "Regular web
+application" registration — single-page apps have no secret) **or**, for any other OIDC
+provider, `{"issuer": ..., "clientId": ..., "clientSecret": ...}`. The deploy scripts derive
 `OAUTH2_PROXY_CLIENT_ID` / `OAUTH2_PROXY_CLIENT_SECRET` / `OAUTH2_PROXY_OIDC_ISSUER_URL` from it.
-Never read that file back into the conversation. The deploy refuses to run while the client
-values are still example values, so collect the file before deploying. `OAUTH2_PROXY_PROVIDER` is **always `oidc`** —
+Never read that file back into the conversation. `OAUTH2_PROXY_PROVIDER` is **always `oidc`** —
 oauth2-proxy has no `ibm` or `appid` provider, so do not invent one. The Dex issuer in
 `docker-compose.yml` is local development only — never put it in `.env.production` or suggest it
 "for a demo". After deploying, the printed `/oauth2/callback` URL must be registered in App ID

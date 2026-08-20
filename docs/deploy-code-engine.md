@@ -61,9 +61,11 @@ Fill it locally and rerun; never commit it or paste its contents into chat.
 - `DATABASE_URL` — the connection string from above.
 - `DATABASE_CA_CERT` — see [Database TLS](#database-tls) above.
 - Secrets you own — `BETTER_AUTH_SECRET` (`openssl rand -hex 32`), or on the oauth-proxy
-  flavor the IdP client values. With IBM App ID (the usual choice) don't fill them by hand:
-  paste the instance's **Service credentials** JSON verbatim into `.secrets/appid-credentials.json`
-  (gitignored; use a "Regular web application" registration) and the deploy scripts derive
+  flavor the IdP client values. Don't fill the IdP values by hand: the deploy preflight
+  creates gitignored `.secrets/idp-credentials.json` and refuses to run until it is filled in.
+  With IBM App ID (the usual choice) paste the instance's **Service credentials** JSON into it
+  verbatim (use a "Regular web application" registration); with any other OIDC provider paste
+  `{"issuer": ..., "clientId": ..., "clientSecret": ...}`. The deploy scripts derive
   `OAUTH2_PROXY_CLIENT_ID`, `OAUTH2_PROXY_CLIENT_SECRET`, and `OAUTH2_PROXY_OIDC_ISSUER_URL`.
   `OAUTH2_PROXY_PROVIDER` stays `oidc` — oauth2-proxy has no `ibm`/`appid` provider. The Dex
   setup in `docker-compose.yml` is local development only. Register the printed
