@@ -401,7 +401,12 @@ test("Code Engine preflight reports every problem in one run", async (t) => {
 
   assert.notEqual(result.status, 0);
   assert.match(output, /is not ready to deploy/);
-  assert.match(output, /1\. DATABASE_URL is missing or still the example value/);
+  if (ceScript.includes("DATABASE_URL is missing")) {
+    assert.match(output, /1\. DATABASE_URL is missing or still the example value/);
+  } else {
+    // The no-database flavor validates its API_KEY instead.
+    assert.match(output, /1\. API_KEY is missing or still the example value/);
+  }
   assert.match(output, /create-deploy-key\.sh/);
   // preflight runs before any cloud interaction
   assert.doesNotMatch(await readFile(fixture.ibmcloudLog, "utf8"), /ce (project|application)/);
@@ -410,6 +415,42 @@ test("Code Engine preflight reports every problem in one run", async (t) => {
     const created = await stat(path.join(fixture.directory, ".secrets/idp-credentials.json"));
     assert.equal(created.size, 0);
   }
+});
+
+test("Code Engine first run creates the env file and still lists every problem", async (t) => {
+  const ceScript = await readFile(path.join(root, "deploy/ce-deploy.sh"), "utf8");
+  if (!ceScript.includes("validate_production_env")) {
+    t.skip("flavor has no production env validation");
+    return;
+  }
+
+  const fixture = await createCodeEngineFixture(t);
+  const { rm } = await import("node:fs/promises");
+  await rm(path.join(fixture.directory, ".env.production"));
+  await cp(
+    path.join(root, ".env.production.example"),
+    path.join(fixture.directory, ".env.production.example"),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      IBMCLOUD_API_KEY: "",
+      MOCK_STATE: fixture.state,
+      PATH: `${fixture.bin}:${process.env.PATH}`,
+    },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  // The very first run must not stop at "created the file, rerun": it creates the env file
+  // AND reports the complete list of values to fill in, before any cloud interaction.
+  assert.notEqual(result.status, 0);
+  assert.match(output, /created \.env\.production from \.env\.production\.example/);
+  assert.match(output, /is not ready to deploy/);
+  await access(path.join(fixture.directory, ".env.production"));
+  assert.doesNotMatch(await readFile(fixture.ibmcloudLog, "utf8"), /ce (project|application)/);
 });
 
 test("create-deploy-key stores the key without displaying it", async (t) => {
@@ -573,6 +614,7 @@ async function createCodeEngineFixture(t, { existing = false, includeApiKey = tr
     path.join(directory, ".env.production"),
     [
       "DATABASE_URL=postgres://app:password@postgres.example:5432/app",
+      "API_KEY=test-api-key-for-the-no-database-flavor",
       "BETTER_AUTH_SECRET=test-secret-with-at-least-32-characters",
       "BETTER_AUTH_URL=https://cen-starter.example.com",
       "OAUTH2_PROXY_OIDC_ISSUER_URL=https://auth.example.test/oidc",

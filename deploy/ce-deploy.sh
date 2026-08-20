@@ -211,8 +211,8 @@ check_preconditions() {
   if [[ ! -f "$ENV_FILE" ]]; then
     cp .env.production.example "$ENV_FILE"
     chmod 600 "$ENV_FILE"
-    error "created $ENV_FILE from .env.production.example; fill in the required values locally, then rerun this command"
-    exit 1
+    # Keep going: the preflight below lists everything to fill in, all in this first run.
+    info "created $ENV_FILE from .env.production.example"
   fi
 
   need_command ibmcloud

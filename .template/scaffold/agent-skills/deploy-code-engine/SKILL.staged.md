@@ -46,12 +46,12 @@ Things that happen automatically so you don't handle them:
   boot; Drizzle keys on the journal's `when` timestamp, and the table lives in the `drizzle`
   schema, not `public`).
 
-If `.env.production` is absent, run the deploy command once: it creates the file from the
-example with mode `0600` and exits before any cloud mutation. On later runs the script
-validates the whole file up front and lists every missing or example value in one error —
-relay the complete list to the user in a single message instead of fixing one item per run. Tell the user which placeholder
-keys to replace in that local file. Do not ask them to send values to you, print the file, or
-read secret values back into the conversation.
+If `.env.production` is absent, the deploy command creates it from the example with mode
+`0600` and continues straight into validation: every run validates the whole file up front
+and lists every missing or example value in one error, before any cloud mutation — relay the
+complete list to the user in a single message instead of fixing one item per run. Tell the
+user which placeholder keys to replace in that local file. Do not ask them to send values to
+you, print the file, or read secret values back into the conversation.
 
 Before the first registry-secret creation, check for a configured key without printing its
 value. If it is absent, offer to create one; on approval run `./deploy/create-deploy-key.sh`
