@@ -5,6 +5,13 @@ description: Deploy this app to IBM Cloud Code Engine — one-command cloud-side
 
 # Deploy to IBM Cloud Code Engine
 
+**Execute, don't instruct.** Run every command yourself; never print a numbered plan of
+commands for the user to run, and don't interview them up front. Start by running the deploy
+script once — its preflight creates `.env.production` and `.secrets/idp-credentials.json` and
+prints the complete list of what's missing. Relay that list in one short message. The only
+things the user ever does by hand: paste secret values into those two local files, and
+register the callback URL in the IdP console. Everything else is yours to run.
+
 Same single container as everywhere else (API + SPA, port 8080), run as a Code Engine app.
 The entry point is `deploy/ce-deploy.sh` — idempotent, safe to rerun, and builds the image in
 Code Engine from a filtered archive of the local working tree (no Git remote and no local

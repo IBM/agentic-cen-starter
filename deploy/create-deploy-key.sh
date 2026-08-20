@@ -55,6 +55,14 @@ if ! ibmcloud account show >/dev/null 2>&1; then
   exit 1
 fi
 
+# Seed the env file from the example first: writing the key into a fresh file would
+# otherwise leave the user without the template, and the deploy script skips its own
+# create-from-example step once the file exists.
+if [[ ! -f "$ENV_FILE" && -f .env.production.example ]]; then
+  cp .env.production.example "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+fi
+
 temp_file=$(mktemp)
 ibmcloud iam api-key-create "$key_name" \
   -d "Deployment key for $key_name (created by deploy/create-deploy-key.sh)" \
@@ -72,7 +80,7 @@ let env = "";
 try {
   env = fs.readFileSync(envFile, "utf8");
 } catch {
-  // absent: the deploy script creates it from the example later; start it here
+  // no .env.production.example to seed from - start the file with just the key
 }
 const lines = env.split("\n").filter((line) => !/^(export )?IAM_API_KEY=/.test(line));
 while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();

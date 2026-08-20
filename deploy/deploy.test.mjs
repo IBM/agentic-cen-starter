@@ -494,6 +494,11 @@ test("create-deploy-key stores the key without displaying it", async (t) => {
     path.join(root, "deploy/create-deploy-key.sh"),
     path.join(directory, "deploy/create-deploy-key.sh"),
   );
+  // Running the key script before the first deploy must not leave a template-less env file.
+  await cp(
+    path.join(root, ".env.production.example"),
+    path.join(directory, ".env.production.example"),
+  );
 
   const bin = path.join(directory, "bin");
   await mkdir(bin);
@@ -525,6 +530,10 @@ test("create-deploy-key stores the key without displaying it", async (t) => {
   assert.match(env, /IAM_API_KEY=secret-key-value-123/);
   assert.doesNotMatch(output, /secret-key-value-123/);
   assert.equal((await stat(path.join(directory, ".env.production"))).mode & 0o777, 0o600);
+  // The example template must survive: the file starts as a copy of the example,
+  // with the key added, so the user still has every placeholder to fill in.
+  // (Every flavor's example has comment lines; a key-only file has none.)
+  assert.match(env, /^#/m);
 
   // Rerunning must not mint another key: same script, same mock, key already stored.
   const rerun = spawnSync("bash", ["deploy/create-deploy-key.sh", "test-key"], {
