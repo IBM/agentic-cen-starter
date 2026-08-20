@@ -346,20 +346,15 @@ require_database_url() {
 
   sslmode=$(printf '%s' "$database_url" | sed -n 's/.*[?&]sslmode=\([^&]*\).*/\1/p')
   case "$sslmode" in
-    no-verify | disable)
-      warning "DATABASE_URL uses sslmode=$sslmode: the connection is encrypted but the server is not authenticated. Set DATABASE_CA_CERT to verify it."
-      return 0
-      ;;
+    no-verify | disable) return 0 ;;
   esac
 
   error "DATABASE_URL points at IBM Cloud Databases with sslmode=${sslmode:-<unset>}, but DATABASE_CA_CERT is empty in $ENV_FILE."
-  error "IBM Cloud Databases uses a private CA, so the app would fail to boot with SELF_SIGNED_CERT_IN_CHAIN."
-  error "Pick one:"
-  error "  1. Verify the certificate (recommended). Export the CA and put it in DATABASE_CA_CERT:"
-  error "       ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem"
-  error "       base64 -i icd-ca.pem | tr -d '\n'"
-  error "  2. Skip verification (encrypted, unauthenticated; demos only):"
-  error "       change sslmode to no-verify in DATABASE_URL."
+  error "IBM Cloud Databases uses a private CA, so the app would fail to boot with SELF_SIGNED_CERT_IN_CHAIN. Either:"
+  error "  - change sslmode to no-verify in DATABASE_URL (encrypted, server not verified), or"
+  error "  - keep sslmode=$sslmode and set DATABASE_CA_CERT:"
+  error "      ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem"
+  error "      base64 -i icd-ca.pem | tr -d '\n'"
   exit 1
 }
 

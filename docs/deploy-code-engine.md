@@ -34,23 +34,20 @@ registry secret — the script creates whatever is missing.
 
 ### Database TLS
 
-IBM Cloud Databases issues certificates from its own private CA (`CN=IBM Cloud Databases`),
-not a public one. `pg` verifies certificates by default, so the connection string ICD gives
-you fails at boot with `SELF_SIGNED_CERT_IN_CHAIN`. Export the CA and keep verification on:
+IBM Cloud Databases issues certificates from its own private CA, so its copy-paste connection
+string (`sslmode=verify-full`) fails at boot with `SELF_SIGNED_CERT_IN_CHAIN` — node-postgres
+verifies certificates by default. The example `DATABASE_URL` therefore uses `sslmode=no-verify`:
+encrypted, server not verified (the same posture libpq-based apps get by default).
+
+To actually verify the server, keep `sslmode=verify-full` and put the CA in `DATABASE_CA_CERT`:
 
 ```bash
 ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem
 base64 -i icd-ca.pem | tr -d '\n'      # paste into DATABASE_CA_CERT
 ```
 
-Keep `sslmode=verify-full` in `DATABASE_URL`; the CA in `DATABASE_CA_CERT` takes precedence
-over any SSL parameters in the URL. The certificate's SANs include the connection hostname, so
-full verification succeeds.
-
-The alternative is `sslmode=no-verify`, which encrypts the connection but does not authenticate
-the server, leaving it open to interception between Code Engine and the database. It's a demo
-shortcut, not a default. The deploy script refuses to run against an ICD host with neither
-configured, and prints both options.
+The CA takes precedence over SSL parameters in the URL. The deploy script refuses to run
+against an ICD host that has a verifying sslmode but no CA, and prints both options.
 
 ## Configure production values
 

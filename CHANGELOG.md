@@ -6,19 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
-- Database TLS is configured, not guessed. IBM Cloud Databases issues certificates from its own
-  private CA, so its copy-paste connection string made `pg` fail at boot with
-  `SELF_SIGNED_CERT_IN_CHAIN`. `DATABASE_CA_CERT` now carries the CA (base64 or escaped PEM) and
-  takes precedence over URL-level SSL parameters, so `sslmode=verify-full` genuinely verifies.
-  `ce-deploy.sh` preflights this before any cloud mutation and names both remedies; the
-  `sslmode=no-verify` shortcut still works but warns that the server is unauthenticated.
-- Boot-time migration failures caused by duplicate objects (Postgres `42P07`/`42710`) now explain
-  the two real causes — a database that is not exclusively this app's, or migrations regenerated
-  after being applied — and state the rule Drizzle actually uses, so agents stop hand-inserting
-  rows into `drizzle.__drizzle_migrations`.
-- The oauth-proxy flavor is shaped for IBM App ID: an App ID issuer placeholder, `oidc` pinned as
-  the only valid `OAUTH2_PROXY_PROVIDER`, Dex marked local-development-only, and the
-  `SKIP_PROVIDER_BUTTON` / `INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL` settings App ID logins need.
+- Database TLS works against IBM Cloud Databases out of the box: the example `DATABASE_URL`
+  uses `sslmode=no-verify` (ICD's private CA fails node-postgres verification), with optional
+  `DATABASE_CA_CERT` for real verification. `ce-deploy.sh` preflights the broken combination.
+- Duplicate-object migration failures at boot now explain the cause (a non-empty database or
+  regenerated migrations) instead of a bare stack trace.
+- The oauth-proxy flavor documents IBM App ID (provider stays `oidc`; Dex is dev-only) and adds
+  the `SKIP_PROVIDER_BUTTON` / `INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL` settings App ID needs.
 
 - Hardened Code Engine deployment using the lessons from the maintained full-stack CEN
   template: explicit region targeting, deterministic project readiness and selection,

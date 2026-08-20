@@ -6,8 +6,6 @@ import * as schema from "./schema";
 
 const MIGRATION_LOCK_KEY = 7461001n;
 
-// 42P07 duplicate_table / 42710 duplicate_object: the schema is already there. Almost always a
-// reused database rather than a broken migration, so say so instead of printing a bare stack.
 function isDuplicateObjectError(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
   return code === "42P07" || code === "42710";
@@ -51,12 +49,9 @@ export async function migrateOnStart(): Promise<void> {
     console.error("database migrations failed", error);
     if (isDuplicateObjectError(error)) {
       console.error(
-        "This database already contains objects a migration is trying to create. That means it " +
-          "is not exclusively owned by this app, or its migrations were regenerated after being " +
-          "applied — Drizzle skips a migration only when the newest row in " +
-          "drizzle.__drizzle_migrations has created_at >= the `when` value in " +
-          "src/db/migrations/meta/_journal.json. Deploy against an empty database, or reconcile " +
-          "that table deliberately. Do not hand-insert rows to make this message go away.",
+        "The database already contains objects this migration creates — it is not empty, or its " +
+          "migrations were regenerated after being applied. Use an empty database; do not " +
+          "hand-edit drizzle.__drizzle_migrations.",
       );
     }
     process.exit(1);

@@ -35,20 +35,15 @@ Things that happen automatically so you don't handle them:
 - A reachable PostgreSQL — typically IBM Cloud Databases for PostgreSQL; its connection
   string in `DATABASE_URL`. Code Engine has no in-cluster database convention: the script
   refuses to deploy without `DATABASE_URL`.
-- **Database TLS.** IBM Cloud Databases issues certificates from its own private CA, and
-  node-postgres verifies by default, so ICD's own copy-paste connection string fails at boot
-  with `SELF_SIGNED_CERT_IN_CHAIN`. Keep `sslmode=verify-full` and set `DATABASE_CA_CERT`
-  (`ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem`, then
-  `base64 -i icd-ca.pem | tr -d '\n'`). `sslmode=no-verify` also connects but leaves the
-  server unauthenticated — offer it as a demo shortcut the user opts into, never silently.
-  The deploy script preflights this and prints both options.
-- **An empty database.** Migrations run at boot. If the database already contains the app's
-  tables — a reused instance, or another deployment of the same app — boot fails with
-  `relation "..." already exists`. Ask for an empty database or schema. Never hand-insert rows
-  into `drizzle.__drizzle_migrations` to silence it: Drizzle skips a migration only when that
-  table's newest `created_at` is `>=` the `when` value in
-  `backend/src/db/migrations/meta/_journal.json`, so guessed values fail again on the next boot,
-  and the table lives in the `drizzle` schema, not `public`.
+- **Database TLS.** IBM Cloud Databases uses a private CA, so its copy-paste connection string
+  (`sslmode=verify-full`) fails at boot with `SELF_SIGNED_CERT_IN_CHAIN`. The example default is
+  `sslmode=no-verify` (encrypted, server not verified); to verify instead, set `DATABASE_CA_CERT`
+  — see `docs/deploy-code-engine.md#database-tls`. The deploy script preflights this.
+- **An empty database.** Migrations run at boot; a database that already contains the app's
+  tables fails with `relation "..." already exists`. Ask for an empty database or schema — never
+  hand-edit `drizzle.__drizzle_migrations` to silence it (guessed rows fail again on the next
+  boot; Drizzle keys on the journal's `when` timestamp, and the table lives in the `drizzle`
+  schema, not `public`).
 
 If `.env.production` is absent, run the deploy command once: it creates the file from the
 example with mode `0600` and exits before any cloud mutation. Tell the user which placeholder
