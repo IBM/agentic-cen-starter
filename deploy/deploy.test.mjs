@@ -131,7 +131,12 @@ test("Code Engine fresh deploy targets explicitly and reconciles health settings
   assert.match(log, /--probe-live interval=10/);
   assert.match(log, /--probe-ready path=\/api\/health/);
   assert.match(log, /--build-timeout 1800/);
-  assert.match(log, /--wait-timeout 1200/);
+  assert.match(log, /--wait-timeout 3000/);
+  if (ceScript.includes("DATABASE_URL is missing")) {
+    // The database preflight runs when DATABASE_URL is validated (skipped here:
+    // the fixture has no backend workspace with dependencies installed).
+    assert.match(output, /Skipping the database preflight/);
+  }
 
   const appEnv = await readFile(fixture.appEnv, "utf8");
   assert.doesNotMatch(appEnv, /cloud-key-must-not-reach-the-app/);
@@ -185,6 +190,48 @@ test("Code Engine names the application after the bootstrapped project", async (
     output,
     /Application: https:\/\/todo-app-2-x(?:-oauth-proxy)?\.test\.eu-de\.codeengine\.appdomain\.cloud/,
   );
+});
+
+test("Code Engine rollout failure prints status, logs, and guidance", async (t) => {
+  const fixture = await createCodeEngineFixture(t);
+  await writeFile(path.join(fixture.state, "app-create-fails"), "");
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.notEqual(result.status, 0, output);
+  assert.match(output, /did not become ready/);
+  // The container logs are surfaced so the failure cause is visible without extra commands.
+  assert.match(output, /relation "todo" already exists/);
+  assert.match(output, /rerun \.\/deploy\/ce-deploy\.sh/);
+});
+
+test("Code Engine watchdog stops a crash-looping rollout instead of waiting it out", async (t) => {
+  const fixture = await createCodeEngineFixture(t);
+  await writeFile(path.join(fixture.state, "app-crashloop"), "");
+
+  const started = Date.now();
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      CE_DEPLOY_ROLLOUT_CHECK_SECONDS: "2",
+      MOCK_STATE: fixture.state,
+      PATH: `${fixture.bin}:${process.env.PATH}`,
+    },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.notEqual(result.status, 0, output);
+  assert.match(output, /crash-looping/);
+  assert.match(output, /relation "todo" already exists/);
+  // Caught via BackOff events within seconds, not by the rollout wait timeout.
+  assert.ok(Date.now() - started < 30_000, `took ${Date.now() - started}ms`);
 });
 
 test("Code Engine creates a private production env template before cloud access", async (t) => {
@@ -935,10 +982,30 @@ if [[ "$*" == ce\ secret\ create* || "$*" == ce\ secret\ update* ]]; then
   exit 0
 fi
 
+if [[ "$*" == ce\ application\ events\ * ]]; then
+  # Real CLI output is localized, but the Kubernetes 'BackOff' reason is locale-stable.
+  if [[ -f "$MOCK_STATE/app-crashloop" && -f "$MOCK_STATE/app-created" ]]; then
+    printf 'Warning  BackOff  1m  kubelet  Back-off restarting failed container user-container in pod %s-00002-deployment-abc123\n' "$5"
+  fi
+  exit 0
+fi
+if [[ "$*" == ce\ application\ logs\ * ]]; then
+  printf 'database migrations starting\ndatabase migrations failed DrizzleQueryError\ncause: error: relation "todo" already exists\n'
+  exit 0
+fi
+
 if [[ "$*" == ce\ application\ get\ --name\ * ]]; then
   app_name="$5"
   marker="app-created"
   if [[ "$app_name" == *-oauth-proxy ]]; then marker="proxy-created"; fi
+  if [[ "$*" == *"--output json" ]]; then
+    if [[ -f "$MOCK_STATE/app-crashloop" && -f "$MOCK_STATE/$marker" ]]; then
+      printf '{"status":{"latestCreatedRevisionName":"%s-00002"}}\n' "$app_name"
+    else
+      printf '{}\n'
+    fi
+    exit 0
+  fi
   if [[ "$*" == *"--output url" ]]; then
     if [[ -f "$MOCK_STATE/$marker" ]]; then
       printf 'https://%s.test.eu-de.codeengine.appdomain.cloud\n' "$app_name"
@@ -953,7 +1020,11 @@ if [[ "$*" == ce\ application\ create* ]]; then
   if [[ "$*" == *-oauth-proxy* ]]; then
     : > "$MOCK_STATE/proxy-created"
   else
+    if [[ -f "$MOCK_STATE/app-create-fails" ]]; then exit 1; fi
     : > "$MOCK_STATE/app-created"
+    # Simulate a rollout wait that never returns because the revision crash-loops;
+    # exec keeps the pipe in one process so killing the mock releases it.
+    if [[ -f "$MOCK_STATE/app-crashloop" ]]; then exec sleep 8; fi
   fi
   exit 0
 fi

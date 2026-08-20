@@ -395,6 +395,145 @@ application_url() {
   printf '%s' "${url%,}"
 }
 
+# Refuse to deploy against a database that already contains another app's tables: the
+# boot-time migrations would fail with 'relation "..." already exists' and the new
+# revision would crash-loop without ever becoming ready.
+preflight_database() {
+  local preflight_output=""
+  local preflight_status=0
+
+  if [[ -z "${database_url:-}" ]]; then
+    return 0
+  fi
+
+  if ! (cd backend 2>/dev/null && node -e 'require.resolve("pg")' >/dev/null 2>&1); then
+    info "Skipping the database preflight (backend dependencies are not installed; run 'pnpm install' to enable it)."
+    return 0
+  fi
+
+  info "Checking the database at DATABASE_URL is reachable and empty (or already this app's)..."
+  set +e
+  preflight_output=$(cd backend && PREFLIGHT_DATABASE_URL="$database_url" node --input-type=commonjs -e '
+    const { Client } = require("pg");
+    const client = new Client({
+      connectionString: process.env.PREFLIGHT_DATABASE_URL,
+      connectionTimeoutMillis: 10000,
+      query_timeout: 10000,
+    });
+    (async () => {
+      try {
+        await client.connect();
+      } catch (error) {
+        console.log("unreachable: " + error.message);
+        process.exit(2);
+      }
+      try {
+        const tables = await client.query(
+          "select table_name from information_schema.tables where table_schema = $1 and table_type = $2 order by table_name",
+          ["public", "BASE TABLE"],
+        );
+        const journal = await client.query("select to_regclass($1) as journal", [
+          "drizzle.__drizzle_migrations",
+        ]);
+        await client.end();
+        if (tables.rowCount > 0 && journal.rows[0].journal === null) {
+          console.log(tables.rows.map((row) => row.table_name).join(", "));
+          process.exit(3);
+        }
+        process.exit(0);
+      } catch (error) {
+        console.log("check failed: " + error.message);
+        process.exit(2);
+      }
+    })();
+  ' 2>&1)
+  preflight_status=$?
+  set -e
+
+  case "$preflight_status" in
+    0) ;;
+    3)
+      error "DATABASE_URL points at a database that is not empty: it already has tables ($preflight_output) but no record of this app's migrations. Deploying would crash-loop at boot with 'relation ... already exists'. Point DATABASE_URL at an empty database, or empty this one first (connect with psql and run: DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;). Do not hand-edit drizzle.__drizzle_migrations to work around this."
+      exit 1
+      ;;
+    *)
+      warning "could not check the database ($preflight_output); continuing. If the deploy then crash-loops with 'relation ... already exists', the database is not empty - use an empty one."
+      ;;
+  esac
+}
+
+latest_application_revision() {
+  ibmcloud ce application get --name "$1" --output json 2>/dev/null \
+    | sed -n 's/.*"latestCreatedRevisionName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -n 1
+}
+
+# Kubernetes emits 'BackOff' warning events within about a minute of a container that
+# starts and dies repeatedly - far sooner than the rollout wait times out. The reason
+# string is locale-stable even though the CLI localizes the text around it. Only events
+# for a revision created by THIS rollout count: events are retained for up to an hour,
+# so a previous failed revision must not fail a rerun that would fix it.
+application_crashloop_detected() {
+  local application_name="$1"
+  local baseline_revision="$2"
+  local revision=""
+
+  revision=$(latest_application_revision "$application_name")
+  if [[ -z "$revision" || "$revision" == "$baseline_revision" ]]; then
+    return 1
+  fi
+
+  ibmcloud ce application events -n "$application_name" 2>/dev/null \
+    | grep "BackOff" | grep -q "$revision"
+}
+
+report_application_failure() {
+  local application_name="$1"
+
+  warning "the '$application_name' application did not become ready; recent status:"
+  ibmcloud ce application get --name "$application_name" 2>&1 | tail -n 12 || true
+  warning "container logs (the failure cause is usually in the last few lines):"
+  ibmcloud ce application logs -n "$application_name" 2>&1 | tail -n 40 || true
+}
+
+# Run an application create/update that waits for readiness, watching for crash-loops
+# while it waits. On any failure the application status and container logs are printed
+# before exiting - the wait alone would hang silently until its timeout.
+run_application_rollout() {
+  local application_name="$1"
+  shift
+  local baseline_revision=""
+  local rollout_pid=""
+  local ticks=0
+  local check_every="${CE_DEPLOY_ROLLOUT_CHECK_SECONDS:-20}"
+
+  baseline_revision=$(latest_application_revision "$application_name")
+
+  ibmcloud ce "$@" &
+  rollout_pid=$!
+
+  while kill -0 "$rollout_pid" 2>/dev/null; do
+    sleep 1
+    ticks=$((ticks + 1))
+    if ((ticks % check_every != 0)); then
+      continue
+    fi
+    if application_crashloop_detected "$application_name" "$baseline_revision"; then
+      kill "$rollout_pid" 2>/dev/null || true
+      wait "$rollout_pid" 2>/dev/null || true
+      report_application_failure "$application_name"
+      error "the new '$application_name' revision is crash-looping: its container keeps starting and exiting. The logs above show the cause; fix it and rerun ./deploy/ce-deploy.sh. If they end with 'relation ... already exists', the database is not empty - point DATABASE_URL at an empty database or drop the old schema first."
+      exit 1
+    fi
+  done
+
+  if ! wait "$rollout_pid"; then
+    report_application_failure "$application_name"
+    error "the '$application_name' application did not become ready. The status and logs above show the cause; fix it and rerun ./deploy/ce-deploy.sh."
+    exit 1
+  fi
+}
+
 derive_env_values() {
   local env_file="$1"
   local auth_url=""
@@ -501,13 +640,13 @@ ensure_application() {
     --probe-ready path=/api/health \
     --probe-ready port=8080 \
     --wait \
-    --wait-timeout 1200)
+    --wait-timeout 3000)
 
   if [[ "$action" == "create" ]]; then
     arguments+=(--image "$image")
   fi
 
-  ibmcloud ce "${arguments[@]}"
+  run_application_rollout "$APP_NAME" "${arguments[@]}"
 }
 
 finalize_derived_urls() {
@@ -529,7 +668,7 @@ finalize_derived_urls() {
   update_app_secret
   for application_name in "${derived_app_names[@]}"; do
     info "Starting a new '$application_name' revision with the derived environment values."
-    ibmcloud ce application update --name "$application_name" --wait --wait-timeout 600
+    run_application_rollout "$application_name" application update --name "$application_name" --wait --wait-timeout 600
   done
 }
 
@@ -559,6 +698,7 @@ print_summary() {
 parse_args "$@"
 check_preconditions
 validate_production_env
+preflight_database
 target_resource_group
 ensure_project
 ensure_registry_namespace

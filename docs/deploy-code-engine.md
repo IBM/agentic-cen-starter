@@ -109,6 +109,16 @@ liveness probes against `/api/health`, and reconciles runtime settings on update
 creates. If the registry secret already exists, omit the API key to reuse it or provide one
 to rotate its credentials.
 
+Two guards keep a broken deploy from wasting your time. Before touching the cloud, the
+script connects to `DATABASE_URL` (when the backend's dependencies are installed) and
+refuses to deploy against a non-empty database that this app never migrated — boot-time
+migrations would otherwise crash-loop with `relation ... already exists`; an empty database
+and redeploys against the app's own database pass, and an unreachable database only warns
+(IBM Cloud Databases may not accept connections from your machine). During the rollout
+wait, a watchdog checks for crash-looping containers and stops the deploy within seconds
+instead of waiting out the timeout; every rollout failure prints the application status and
+the last container log lines, which name the actual cause.
+
 ## Verify
 
 The summary prints the application URL (on oauth-proxy: the proxy URL — the main app is

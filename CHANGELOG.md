@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Code Engine deploys fail fast and loud instead of hanging on a broken revision:
+  a watchdog watches for Kubernetes `BackOff` events while the rollout waits and stops
+  the deploy within seconds of a crash-loop, and any rollout failure prints the
+  application status and the last container log lines (which name the actual cause)
+  before exiting. Previously a crash-looping revision meant 20 minutes of silence
+  followed by a bare CLI error.
+- `ce-deploy.sh` preflights the database before touching the cloud: it refuses to deploy
+  when `DATABASE_URL` points at a non-empty database that was never migrated by this app
+  (boot-time migrations would crash-loop with `relation ... already exists`), continues
+  normally for an empty database or this app's own redeploy, and warns-and-continues
+  when the database is unreachable from the local machine.
 - Code Engine builds get a 30-minute timeout (`--build-timeout 1800`) instead of the
   600-second default, which the very first build in a fresh project can exceed — cold build
   infrastructure provisioning counts against it, and hitting it failed the deploy with

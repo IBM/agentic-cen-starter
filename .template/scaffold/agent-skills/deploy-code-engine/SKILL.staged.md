@@ -53,10 +53,13 @@ Things that happen automatically so you don't handle them:
   `sslmode=no-verify` (encrypted, server not verified); to verify instead, set `DATABASE_CA_CERT`
   — see `docs/deploy-code-engine.md#database-tls`. The deploy script preflights this.
 - **An empty database.** Migrations run at boot; a database that already contains the app's
-  tables fails with `relation "..." already exists`. Ask for an empty database or schema — never
-  hand-edit `drizzle.__drizzle_migrations` to silence it (guessed rows fail again on the next
-  boot; Drizzle keys on the journal's `when` timestamp, and the table lives in the `drizzle`
-  schema, not `public`).
+  tables fails with `relation "..." already exists`. The deploy script preflights this and
+  refuses to deploy against a non-empty foreign database — relay its message. Ask for an empty
+  database or schema — never hand-edit `drizzle.__drizzle_migrations` to silence it (guessed
+  rows fail again on the next boot; Drizzle keys on the journal's `when` timestamp, and the
+  table lives in the `drizzle` schema, not `public`). If a rollout still fails, the script
+  prints the application status and container logs itself before exiting — read those instead
+  of re-running or debugging ad hoc.
 
 If `.env.production` is absent, the deploy command creates it from the example with mode
 `0600` and continues straight into validation: every run validates the whole file up front
