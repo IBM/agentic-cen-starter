@@ -44,8 +44,9 @@ that cannot sensibly be choices, such as a new name or URL. Never ask for creden
 
 Create `.env.production` from the example and put application runtime secrets there. Do not
 ask users to paste secrets into chat or expose them in shell command text. For IBM App ID,
-the convenient credentials JSON may be saved locally as `.secrets/appid.json` (ignored);
-read it from there and map the issuer/client values into `.env.production`.
+create empty `.secrets/appid-credentials.json` (gitignored) and ask the user to paste the
+instance's **Service credentials** JSON into it verbatim — the deploy script derives the
+issuer/client values from it at deploy time. Never read that file back into the conversation.
 
 ## Recommended: auto-deploy (internal tools, pilots)
 

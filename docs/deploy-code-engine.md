@@ -58,12 +58,13 @@ Fill it locally and rerun; never commit it or paste its contents into chat.
 - `DATABASE_URL` — the connection string from above.
 - `DATABASE_CA_CERT` — see [Database TLS](#database-tls) above.
 - Secrets you own — `BETTER_AUTH_SECRET` (`openssl rand -hex 32`), or on the oauth-proxy
-  flavor the IdP client values (`OAUTH2_PROXY_OIDC_ISSUER_URL`, `OAUTH2_PROXY_CLIENT_ID`,
-  `OAUTH2_PROXY_CLIENT_SECRET`). The IdP is normally IBM App ID: the issuer is
-  `https://<region>.appid.cloud.ibm.com/oauth/v4/<tenantId>` and `OAUTH2_PROXY_PROVIDER` stays
-  `oidc` — oauth2-proxy has no `ibm`/`appid` provider. The Dex setup in `docker-compose.yml` is
-  local development only. Register the printed `/oauth2/callback` URL in App ID under Manage
-  Authentication → redirect URIs.
+  flavor the IdP client values. With IBM App ID (the usual choice) don't fill them by hand:
+  paste the instance's **Service credentials** JSON verbatim into `.secrets/appid-credentials.json`
+  (gitignored; use a "Regular web application" registration) and the deploy scripts derive
+  `OAUTH2_PROXY_CLIENT_ID`, `OAUTH2_PROXY_CLIENT_SECRET`, and `OAUTH2_PROXY_OIDC_ISSUER_URL`.
+  `OAUTH2_PROXY_PROVIDER` stays `oidc` — oauth2-proxy has no `ibm`/`appid` provider. The Dex
+  setup in `docker-compose.yml` is local development only. Register the printed
+  `/oauth2/callback` URL in App ID under Manage Authentication → redirect URIs.
 - URL-dependent values — **leave them on the example values.** The script reads the real
   app URL from Code Engine and injects them into the app secret itself (`BETTER_AUTH_URL`;
   on the oauth-proxy flavor `OAUTH2_PROXY_REDIRECT_URL`, `OAUTH2_PROXY_UPSTREAMS`, and a

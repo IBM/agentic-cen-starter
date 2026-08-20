@@ -11,6 +11,9 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
   `DATABASE_CA_CERT` for real verification. `ce-deploy.sh` preflights the broken combination.
 - Duplicate-object migration failures at boot now explain the cause (a non-empty database or
   regenerated migrations) instead of a bare stack trace.
+- App ID credentials are collected as a file, not field by field: paste the instance's Service
+  credentials JSON into gitignored `.secrets/appid-credentials.json` and the deploy scripts
+  derive the oauth2-proxy client values from it (wrong registration types are rejected).
 - The oauth-proxy flavor documents IBM App ID (provider stays `oidc`; Dex is dev-only) and adds
   the `SKIP_PROVIDER_BUTTON` / `INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL` settings App ID needs.
 

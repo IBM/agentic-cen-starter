@@ -246,6 +246,85 @@ test("Code Engine accepts an IBM Cloud Databases URL once a CA is configured", a
   assert.match(await readFile(fixture.appEnv, "utf8"), /DATABASE_CA_CERT=cGxhY2Vob2xkZXI=/);
 });
 
+test("Code Engine derives oauth2-proxy values from an App ID credentials file", async (t) => {
+  // Only the oauth-proxy flavor ships the helper.
+  try {
+    await access(path.join(root, "deploy/appid-credentials.mjs"));
+  } catch {
+    t.skip("flavor has no App ID credentials helper");
+    return;
+  }
+
+  const fixture = await createCodeEngineFixture(t);
+  await writeFile(
+    path.join(fixture.directory, ".env.production"),
+    [
+      "DATABASE_URL=postgres://app:password@postgres.example:5432/app",
+      "OAUTH2_PROXY_OIDC_ISSUER_URL=https://idp.example.com/oidc",
+      "OAUTH2_PROXY_PROVIDER=oidc",
+      "OAUTH2_PROXY_CLIENT_ID=replace-with-client-id",
+      "OAUTH2_PROXY_CLIENT_SECRET=replace-with-client-secret",
+      "export IAM_API_KEY=cloud-key-must-not-reach-the-app",
+      "",
+    ].join("\n"),
+  );
+  await mkdir(path.join(fixture.directory, ".secrets"));
+  await writeFile(
+    path.join(fixture.directory, ".secrets/appid-credentials.json"),
+    JSON.stringify({
+      clientId: "client-id-from-file",
+      secret: "secret-value-from-file",
+      oAuthServerUrl: "https://eu-de.appid.cloud.ibm.com/oauth/v4/tenant-from-file",
+      type: "regularwebapp",
+    }),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.equal(result.status, 0, output);
+  const appEnv = await readFile(fixture.appEnv, "utf8");
+  assert.match(appEnv, /OAUTH2_PROXY_CLIENT_ID=client-id-from-file/);
+  assert.match(appEnv, /OAUTH2_PROXY_CLIENT_SECRET=secret-value-from-file/);
+  assert.match(
+    appEnv,
+    /OAUTH2_PROXY_OIDC_ISSUER_URL=https:\/\/eu-de\.appid\.cloud\.ibm\.com\/oauth\/v4\/tenant-from-file/,
+  );
+  // The secret must reach the app secret and nothing else.
+  assert.doesNotMatch(output, /secret-value-from-file/);
+  assert.match(output, /OAUTH2_PROXY_CLIENT_SECRET=<from \.secrets\/appid-credentials\.json>/);
+});
+
+test("Code Engine rejects an App ID credentials file for the wrong registration type", async (t) => {
+  try {
+    await access(path.join(root, "deploy/appid-credentials.mjs"));
+  } catch {
+    t.skip("flavor has no App ID credentials helper");
+    return;
+  }
+
+  const fixture = await createCodeEngineFixture(t);
+  await mkdir(path.join(fixture.directory, ".secrets"));
+  await writeFile(
+    path.join(fixture.directory, ".secrets/appid-credentials.json"),
+    JSON.stringify({ clientId: "spa-client", type: "singlepageapp" }),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /Regular web application/);
+});
+
 test("Code Engine update reuses credentials and fully reconciles the application", async (t) => {
   const fixture = await createCodeEngineFixture(t, { existing: true, includeApiKey: false });
   const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {

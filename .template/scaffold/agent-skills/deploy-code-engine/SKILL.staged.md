@@ -79,13 +79,16 @@ the real URL and rolls a fresh revision before it exits. On the oauth-proxy flav
 script also deploys an `oauth2-proxy` front app and makes the main app project-only
 (identity headers can't be spoofed from the internet); the URL to share is the proxy's.
 
-The IdP is IBM App ID unless the user says otherwise. `OAUTH2_PROXY_PROVIDER` is **always
-`oidc`** — oauth2-proxy has no `ibm` or `appid` provider, so do not invent one. The issuer is
-`https://<region>.appid.cloud.ibm.com/oauth/v4/<tenantId>`, and the client id/secret come from
-the App ID instance. The Dex issuer in `docker-compose.yml` is local development only — never
-put it in `.env.production` or suggest it "for a demo". After deploying, the printed
-`/oauth2/callback` URL must be registered in App ID under Manage Authentication → redirect URIs,
-or login fails at the redirect.
+The IdP is IBM App ID unless the user says otherwise. Collect its credentials through a file,
+never through chat: create empty, gitignored `.secrets/appid-credentials.json`, ask the user to
+paste their App ID instance's **Service credentials** JSON into it verbatim (a "Regular web
+application" registration — single-page apps have no secret), and the deploy scripts derive
+`OAUTH2_PROXY_CLIENT_ID` / `OAUTH2_PROXY_CLIENT_SECRET` / `OAUTH2_PROXY_OIDC_ISSUER_URL` from it.
+Never read that file back into the conversation. `OAUTH2_PROXY_PROVIDER` is **always `oidc`** —
+oauth2-proxy has no `ibm` or `appid` provider, so do not invent one. The Dex issuer in
+`docker-compose.yml` is local development only — never put it in `.env.production` or suggest it
+"for a demo". After deploying, the printed `/oauth2/callback` URL must be registered in App ID
+under Manage Authentication → redirect URIs, or login fails at the redirect.
 
 The deployer waits for project and application readiness, reconciles scaling and health
 probes on every run, reuses an existing registry secret without an API key, and rotates that
