@@ -349,6 +349,9 @@ create_app_secret() {
       -e '/^export IAM_API_KEY=/d' \
       -e '/^IBMCLOUD_API_KEY=/d' \
       -e '/^export IBMCLOUD_API_KEY=/d' \
+      -e '/^[[:space:]]*#/d' \
+      -e '/^[[:space:]]*$/d' \
+      -e '/^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*$/d' \
       -e '/^DATABASE_URL=/d' \
       "$ENV_FILE" > "$env_secret_file"
     printf '\nDATABASE_URL=%s\n' "$database_url" >> "$env_secret_file"
@@ -366,6 +369,9 @@ create_app_secret() {
       -e '/^export IAM_API_KEY=/d' \
       -e '/^IBMCLOUD_API_KEY=/d' \
       -e '/^export IBMCLOUD_API_KEY=/d' \
+      -e '/^[[:space:]]*#/d' \
+      -e '/^[[:space:]]*$/d' \
+      -e '/^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*$/d' \
       "$ENV_FILE" > "$env_secret_file"
   fi
 

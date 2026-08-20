@@ -438,6 +438,9 @@ create_app_secret() {
     -e '/^export IAM_API_KEY=/d' \
     -e '/^IBMCLOUD_API_KEY=/d' \
     -e '/^export IBMCLOUD_API_KEY=/d' \
+    -e '/^[[:space:]]*#/d' \
+    -e '/^[[:space:]]*$/d' \
+    -e '/^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*$/d' \
     "$ENV_FILE" > "$env_secret_file"
 
   derive_env_values "$env_secret_file"
