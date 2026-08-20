@@ -214,7 +214,6 @@ test("Code Engine watchdog stops a crash-looping rollout instead of waiting it o
   const fixture = await createCodeEngineFixture(t);
   await writeFile(path.join(fixture.state, "app-crashloop"), "");
 
-  const started = Date.now();
   const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
     cwd: fixture.directory,
     encoding: "utf8",
@@ -230,8 +229,11 @@ test("Code Engine watchdog stops a crash-looping rollout instead of waiting it o
   assert.notEqual(result.status, 0, output);
   assert.match(output, /crash-looping/);
   assert.match(output, /relation "todo" already exists/);
-  // Caught via BackOff events within seconds, not by the rollout wait timeout.
-  assert.ok(Date.now() - started < 30_000, `took ${Date.now() - started}ms`);
+  // Caught via BackOff events, not by outlasting the wait: had the watchdog missed it,
+  // the mocked rollout would have "succeeded" after its sleep and the deploy run on to
+  // the summary with exit code 0. (No wall-clock bound here - a sleeping laptop pauses
+  // the clock mid-test, which is exactly what once failed this in a long matrix run.)
+  assert.doesNotMatch(output, /Deployment summary/);
 });
 
 test("Code Engine creates a private production env template before cloud access", async (t) => {
