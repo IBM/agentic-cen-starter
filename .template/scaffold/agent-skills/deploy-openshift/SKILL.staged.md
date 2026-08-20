@@ -49,7 +49,10 @@ that cannot sensibly be choices, such as a new name or URL. Never ask for creden
 - **Explicit path**: a registry the cluster can pull from (and you can push to)
 
 Create `.env.production` from the example and put application runtime secrets there. Do not
-ask users to paste secrets into chat or expose them in shell command text. IdP credentials go
+ask users to paste secrets into chat or expose them in shell command text. Never print or
+read `.env.production` or anything under `.secrets/` — no cat, grep, or head, not even to
+check whether they are filled in; the deploy script reports what is missing without exposing
+values. IdP credentials go
 into gitignored `.secrets/idp-credentials.json` (the deploy script creates it empty when
 missing and refuses to run until it is filled in — relay its message): for IBM App ID the
 user pastes the instance's **Service credentials** JSON verbatim, for any other OIDC provider

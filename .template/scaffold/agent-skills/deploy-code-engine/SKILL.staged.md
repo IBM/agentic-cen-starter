@@ -63,7 +63,10 @@ If `.env.production` is absent, the deploy command creates it from the example w
 and lists every missing or example value in one error, before any cloud mutation — relay the
 complete list to the user in a single message instead of fixing one item per run. Tell the
 user which placeholder keys to replace in that local file. Do not ask them to send values to
-you, print the file, or read secret values back into the conversation.
+you, print the file, or read secret values back into the conversation. Never print or read
+`.env.production` or anything under `.secrets/` — no cat, grep, or head, not even to check
+whether they are filled in. The deploy script's preflight is the only readiness check: run it
+and relay its report; it names exactly what is missing without exposing any value.
 
 Before the first registry-secret creation, check for a configured key without printing its
 value. If it is absent, offer to create one; on approval run `./deploy/create-deploy-key.sh`
