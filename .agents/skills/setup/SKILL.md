@@ -45,7 +45,7 @@ missing, use the `prepare-workstation` skill before continuing.
 
 Open with the project, not the tech: **what are you building, and who is it for?** Then
 recommend a configuration with reasons — act like an experienced colleague, not a form. Run
-`pnpm flavor list` to see what exists; read `references/<flavor>.md` for any flavor you're
+`pnpm flavor list` to see what exists (it installs dependencies on first run); read `references/<flavor>.md` for any flavor you're
 about to recommend.
 
 ### Adapt to the user

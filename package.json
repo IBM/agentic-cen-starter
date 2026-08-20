@@ -14,8 +14,8 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "flavor": "tsx .template/scripts/flavor.ts",
-    "bootstrap": "tsx .template/scripts/bootstrap.ts",
+    "flavor": "node .template/scripts/ensure-deps.mjs && tsx .template/scripts/flavor.ts",
+    "bootstrap": "node .template/scripts/ensure-deps.mjs && tsx .template/scripts/bootstrap.ts",
     "typecheck": "tsc -p .template --noEmit",
     "check": "pnpm --recursive --include-workspace-root --if-present typecheck && biome check .",
     "test": "pnpm test:container-engine && pnpm test:deploy && pnpm --recursive --if-present run test",
