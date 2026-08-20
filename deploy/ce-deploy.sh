@@ -352,9 +352,10 @@ require_database_url() {
   error "DATABASE_URL points at IBM Cloud Databases with sslmode=${sslmode:-<unset>}, but DATABASE_CA_CERT is empty in $ENV_FILE."
   error "IBM Cloud Databases uses a private CA, so the app would fail to boot with SELF_SIGNED_CERT_IN_CHAIN. Either:"
   error "  - change sslmode to no-verify in DATABASE_URL (encrypted, server not verified), or"
-  error "  - keep sslmode=$sslmode and set DATABASE_CA_CERT:"
-  error "      ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem"
-  error "      base64 -i icd-ca.pem | tr -d '\n'"
+  error "  - keep sslmode=$sslmode and set DATABASE_CA_CERT (replace ICD_INSTANCE_NAME first;"
+  error "    list instances with: ibmcloud resource service-instances --service-name databases-for-postgresql):"
+  error "      ibmcloud cdb deployment-cacert ICD_INSTANCE_NAME > icd-ca.pem"
+  error "      base64 < icd-ca.pem | tr -d '\n'"
   exit 1
 }
 

@@ -42,8 +42,11 @@ encrypted, server not verified (the same posture libpq-based apps get by default
 To actually verify the server, keep `sslmode=verify-full` and put the CA in `DATABASE_CA_CERT`:
 
 ```bash
-ibmcloud cdb deployment-cacert <deployment-name> > icd-ca.pem
-base64 -i icd-ca.pem | tr -d '\n'      # paste into DATABASE_CA_CERT
+# replace ICD_INSTANCE_NAME with your instance's name — angle-bracket placeholders
+# break when pasted into a shell. List instances:
+#   ibmcloud resource service-instances --service-name databases-for-postgresql
+ibmcloud cdb deployment-cacert ICD_INSTANCE_NAME > icd-ca.pem
+base64 < icd-ca.pem | tr -d '\n'      # paste into DATABASE_CA_CERT
 ```
 
 The CA takes precedence over SSL parameters in the URL. The deploy script refuses to run
