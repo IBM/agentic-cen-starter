@@ -139,14 +139,19 @@ test("Code Engine fresh deploy targets explicitly and reconciles health settings
     /(?:BETTER_AUTH_URL=https:\/\/cen-starter\.test\.eu-de\.codeengine\.appdomain\.cloud|OAUTH2_PROXY_REDIRECT_URL=https:\/\/cen-starter-oauth-proxy\.test\.eu-de\.codeengine\.appdomain\.cloud\/oauth2\/callback)/,
   );
 
+  if (ceScript.includes("private_application_url")) {
+    // Two separate CE apps: the proxy upstream must be cluster-local from the very first
+    // secret write - localhost:8080 in the secret means 502s whenever a deploy is cut short.
+    assert.match(
+      appEnv,
+      /OAUTH2_PROXY_UPSTREAMS=http:\/\/cen-starter\.test\.svc\.cluster\.local\//,
+    );
+    assert.doesNotMatch(appEnv, /OAUTH2_PROXY_UPSTREAMS=http:\/\/localhost/);
+  }
   if (visibility === "project") {
     assert.match(
       log,
       /ce application (?:create|update) --name cen-starter-oauth-proxy .*--argument=--pass-host-header=false/,
-    );
-    assert.match(
-      appEnv,
-      /OAUTH2_PROXY_UPSTREAMS=http:\/\/cen-starter\.test\.svc\.cluster\.local\//,
     );
   }
   assert.match(

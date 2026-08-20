@@ -17,6 +17,9 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
   types are rejected); any other OIDC provider uses `{"issuer", "clientId", "clientSecret"}`.
 - `deploy/create-deploy-key.sh` creates the deployment API key without ever printing it, and
   refuses to mint another key while one is configured (`--rotate` replaces it deliberately).
+- The Code Engine oauth2-proxy upstream is the app's cluster-local URL from the very first
+  secret write instead of starting at `localhost:8080` and being corrected in a late deploy
+  step — an interrupted deploy could leave the proxy answering 502 Bad Gateway.
 - Redeploys of the oauth-proxy flavor no longer corrupt the reused cookie secret:
   `ibmcloud ce secret get --output yaml` returns values already decoded, and decoding them
   again turned the secret into binary garbage that crashlooped oauth2-proxy on every
