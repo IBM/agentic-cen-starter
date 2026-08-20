@@ -12,6 +12,11 @@ prints the complete list of what's missing. Relay that list in one short message
 things the user ever does by hand: paste secret values into those two local files, and
 register the callback URL in the IdP console. Everything else is yours to run.
 
+Executing yourself does not skip approvals. Creating the IBM Cloud API key (and committing
+code) still needs the user's yes first — but ask by offering the prepared, ready-to-run
+action ("Shall I create the deploy key? It's stored without being displayed."), never by
+handing the user commands to run themselves.
+
 Same single container as everywhere else (API + SPA, port 8080), run as a Code Engine app.
 The entry point is `deploy/ce-deploy.sh` — idempotent, safe to rerun, and builds the image in
 Code Engine from a filtered archive of the local working tree (no Git remote and no local

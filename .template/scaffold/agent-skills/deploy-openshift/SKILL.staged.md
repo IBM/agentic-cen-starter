@@ -7,7 +7,9 @@ description: Deploy this app to OpenShift — auto-deploy pipeline (git push = d
 
 **Execute, don't instruct.** Run every command yourself; never print a numbered plan of
 commands for the user to run. The only things the user ever does by hand: paste secret values
-into the local env/credentials files, and any IdP-console step. Everything else is yours to run.
+into the local env/credentials files, and any IdP-console step. Everything else is yours to
+run. Executing yourself does not skip approvals (e.g. ask before creating commits) — but ask
+by offering the prepared action, never by handing the user commands to run themselves.
 
 One container: the API serves the built SPA on port 8080. Manifests live in
 `deploy/openshift/` (kustomize), the entry point is `deploy/deploy.sh` — idempotent, safe to
