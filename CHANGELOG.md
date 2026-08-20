@@ -17,6 +17,10 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
   types are rejected); any other OIDC provider uses `{"issuer", "clientId", "clientSecret"}`.
 - `deploy/create-deploy-key.sh` creates the deployment API key without ever printing it, and
   refuses to mint another key while one is configured (`--rotate` replaces it deliberately).
+- Redeploys of the oauth-proxy flavor no longer corrupt the reused cookie secret:
+  `ibmcloud ce secret get --output yaml` returns values already decoded, and decoding them
+  again turned the secret into binary garbage that crashlooped oauth2-proxy on every
+  redeploy after the first.
 - Deployed applications are named after the project (package.json `name`, set by
   `pnpm bootstrap`) instead of always `cen-starter` — Code Engine app, registry secret,
   and OpenShift manifests alike. Un-bootstrapped checkouts keep the `cen-starter` fallback.

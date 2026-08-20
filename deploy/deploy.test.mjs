@@ -536,6 +536,44 @@ test("create-deploy-key stores the key without displaying it", async (t) => {
   assert.equal(envAfterRerun.match(/^IAM_API_KEY=/gm).length, 1);
 });
 
+test("Code Engine redeploys reuse the cookie secret verbatim", async (t) => {
+  const ceScript = await readFile(path.join(root, "deploy/ce-deploy.sh"), "utf8");
+  if (!ceScript.includes("read_code_engine_secret_key")) {
+    t.skip("flavor does not reuse a cookie secret");
+    return;
+  }
+
+  const fixture = await createCodeEngineFixture(t);
+  const run = () =>
+    spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+      cwd: fixture.directory,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        MOCK_STATE: fixture.state,
+        PATH: `${fixture.bin}:${process.env.PATH}`,
+      },
+    });
+
+  const first = run();
+  assert.equal(first.status, 0, `${first.stdout ?? ""}${first.stderr ?? ""}`);
+  const firstSecret = (await readFile(fixture.appEnv, "utf8")).match(
+    /^OAUTH2_PROXY_COOKIE_SECRET=(.+)$/m,
+  )?.[1];
+  assert.ok(firstSecret, "first deploy should generate a cookie secret");
+
+  const second = run();
+  const output = `${second.stdout ?? ""}${second.stderr ?? ""}`;
+  assert.equal(second.status, 0, output);
+  assert.match(output, /reusing existing OAUTH2_PROXY_COOKIE_SECRET/);
+  const secondSecret = (await readFile(fixture.appEnv, "utf8")).match(
+    /^OAUTH2_PROXY_COOKIE_SECRET=(.+)$/m,
+  )?.[1];
+  // The CE CLI returns secret values already decoded; decoding again would corrupt the
+  // reused secret into binary garbage and crashloop oauth2-proxy on every redeploy.
+  assert.equal(secondSecret, firstSecret);
+});
+
 test("Code Engine update reuses credentials and fully reconciles the application", async (t) => {
   const fixture = await createCodeEngineFixture(t, { existing: true, includeApiKey: false });
   const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
@@ -855,6 +893,15 @@ if [[ "$*" == ce\ registry\ create* || "$*" == ce\ registry\ update* ]]; then
   exit 0
 fi
 
+if [[ "$*" == "ce secret get --name app-env --output yaml" ]]; then
+  # The real CLI prints data: values already DECODED (plaintext), not base64 like raw k8s.
+  if [[ -f "$MOCK_STATE/secret-created" && -f "$MOCK_STATE/app-env" ]]; then
+    printf 'data:\n'
+    sed -n 's/^\(export \)\{0,1\}\([A-Za-z_][A-Za-z0-9_]*\)=\(.*\)$/  \2: \3/p' "$MOCK_STATE/app-env"
+    exit 0
+  fi
+  exit 1
+fi
 if [[ "$*" == ce\ secret\ get* ]]; then
   [[ -f "$MOCK_STATE/secret-created" ]]
   exit
