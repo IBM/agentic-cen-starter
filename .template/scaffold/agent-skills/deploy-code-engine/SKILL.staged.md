@@ -105,8 +105,9 @@ secret when an API key is supplied.
 The deploy summary prints the application URL and every `Derived env:` value.
 
 ```bash
-ibmcloud ce app get --name cen-starter          # Ready
-curl -s https://<app-url>/api/health            # {"status":"ok"}
+# The app is named after package.json "name" (dots/underscores become hyphens).
+ibmcloud ce app get --name "$(node -p 'require("./package.json").name' | tr '._' '--')"   # Ready
+curl -s "$APP_URL/api/health"                   # {"status":"ok"} — use the printed app URL
 ```
 
 Open the URL: sign-in must work end-to-end. If auth fails, compare the `Derived env:` lines

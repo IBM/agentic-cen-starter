@@ -17,6 +17,9 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
   types are rejected); any other OIDC provider uses `{"issuer", "clientId", "clientSecret"}`.
 - `deploy/create-deploy-key.sh` creates the deployment API key without ever printing it, and
   refuses to mint another key while one is configured (`--rotate` replaces it deliberately).
+- Deployed applications are named after the project (package.json `name`, set by
+  `pnpm bootstrap`) instead of always `cen-starter` — Code Engine app, registry secret,
+  and OpenShift manifests alike. Un-bootstrapped checkouts keep the `cen-starter` fallback.
 - The very first `ce-deploy.sh` run no longer stops at "created `.env.production`, rerun":
   it creates the file and reports the complete fill-in list in the same run. The no-database
   flavor now validates its `API_KEY` up front instead of deploying example values silently.

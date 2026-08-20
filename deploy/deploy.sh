@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="cen-starter"
-APP_CONTAINER="cen-starter"
+# The app is named after the project: package.json "name", written by `pnpm bootstrap`.
+# The template's own name is the fallback for un-bootstrapped checkouts and tests.
+APP_NAME="$(node -p 'require("./package.json").name || ""' 2>/dev/null | tr '._' '--' || true)"
+APP_NAME="${APP_NAME:-cen-starter}"
+APP_CONTAINER="$APP_NAME"
 APP_SECRET="app-env"
 ENV_FILE=".env.production"
 OPENSHIFT_DIR="deploy/openshift"
@@ -303,7 +306,8 @@ configure_database() {
 }
 
 ensure_route() {
-  oc apply -n "$namespace" -f "$OPENSHIFT_DIR/route.yaml"
+  # The manifests ship with the template's name; rename them to the project's app name.
+  sed "s/cen-starter/$APP_NAME/g" "$OPENSHIFT_DIR/route.yaml" | oc apply -n "$namespace" -f -
 }
 
 derive_env_values() {
@@ -937,7 +941,14 @@ ensure_route
 capture_route_url
 create_app_secret
 
-oc apply -n "$namespace" -k "$OPENSHIFT_DIR"
+# The kustomize manifests ship with the template's name; render a renamed copy to apply.
+rendered_manifests=$(mktemp -d)
+cp -R "$OPENSHIFT_DIR"/. "$rendered_manifests/"
+for manifest in "$rendered_manifests"/*.yaml; do
+  sed "s/cen-starter/$APP_NAME/g" "$manifest" > "$manifest.renamed" && mv "$manifest.renamed" "$manifest"
+done
+oc apply -n "$namespace" -k "$rendered_manifests"
+rm -rf "$rendered_manifests"
 
 if [[ "$autodeploy" == "true" ]]; then
   configure_autodeploy

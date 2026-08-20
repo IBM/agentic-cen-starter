@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="cen-starter"
+# The app is named after the project: package.json "name", written by `pnpm bootstrap`.
+# The template's own name is the fallback for un-bootstrapped checkouts and tests.
+APP_NAME="$(node -p 'require("./package.json").name || ""' 2>/dev/null | tr '._' '--' || true)"
+APP_NAME="${APP_NAME:-cen-starter}"
 APP_SECRET="app-env"
 ENV_FILE=".env.production"
 REGISTRY_SERVER="icr.io"

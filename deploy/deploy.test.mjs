@@ -155,6 +155,32 @@ test("Code Engine fresh deploy targets explicitly and reconciles health settings
   );
 });
 
+test("Code Engine names the application after the bootstrapped project", async (t) => {
+  const fixture = await createCodeEngineFixture(t);
+  // `pnpm bootstrap` writes the project name here; the deploy scripts must pick it up
+  // (sanitized for Code Engine: dots and underscores become hyphens).
+  await writeFile(
+    path.join(fixture.directory, "package.json"),
+    JSON.stringify({ name: "todo-app_2.x" }),
+  );
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.equal(result.status, 0, output);
+  const log = await readFile(fixture.ibmcloudLog, "utf8");
+  assert.match(log, /ce application (?:create|update) --name todo-app-2-x /);
+  assert.doesNotMatch(log, /--name cen-starter(\s|$)/);
+  assert.match(
+    output,
+    /Application: https:\/\/todo-app-2-x(?:-oauth-proxy)?\.test\.eu-de\.codeengine\.appdomain\.cloud/,
+  );
+});
+
 test("Code Engine creates a private production env template before cloud access", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "cen-ce-env-test-"));
   t.after(async () => {
@@ -843,30 +869,22 @@ if [[ "$*" == ce\ secret\ create* || "$*" == ce\ secret\ update* ]]; then
   exit 0
 fi
 
-if [[ "$*" == "ce application get --name cen-starter --output url" ]]; then
-  if [[ -f "$MOCK_STATE/app-created" ]]; then
-    printf 'https://cen-starter.test.eu-de.codeengine.appdomain.cloud\n'
-    exit 0
+if [[ "$*" == ce\ application\ get\ --name\ * ]]; then
+  app_name="$5"
+  marker="app-created"
+  if [[ "$app_name" == *-oauth-proxy ]]; then marker="proxy-created"; fi
+  if [[ "$*" == *"--output url" ]]; then
+    if [[ -f "$MOCK_STATE/$marker" ]]; then
+      printf 'https://%s.test.eu-de.codeengine.appdomain.cloud\n' "$app_name"
+      exit 0
+    fi
+    exit 1
   fi
-  exit 1
-fi
-if [[ "$*" == "ce application get --name cen-starter" ]]; then
-  [[ -f "$MOCK_STATE/app-created" ]]
-  exit
-fi
-if [[ "$*" == "ce application get --name cen-starter-oauth-proxy --output url" ]]; then
-  if [[ -f "$MOCK_STATE/proxy-created" ]]; then
-    printf 'https://cen-starter-oauth-proxy.test.eu-de.codeengine.appdomain.cloud\n'
-    exit 0
-  fi
-  exit 1
-fi
-if [[ "$*" == "ce application get --name cen-starter-oauth-proxy" ]]; then
-  [[ -f "$MOCK_STATE/proxy-created" ]]
+  [[ -f "$MOCK_STATE/$marker" ]]
   exit
 fi
 if [[ "$*" == ce\ application\ create* ]]; then
-  if [[ "$*" == *'--name cen-starter-oauth-proxy'* ]]; then
+  if [[ "$*" == *-oauth-proxy* ]]; then
     : > "$MOCK_STATE/proxy-created"
   else
     : > "$MOCK_STATE/app-created"
@@ -874,7 +892,7 @@ if [[ "$*" == ce\ application\ create* ]]; then
   exit 0
 fi
 if [[ "$*" == ce\ application\ update* ]]; then
-  if [[ "$*" == *'--name cen-starter-oauth-proxy'* ]]; then : > "$MOCK_STATE/proxy-created"; fi
+  if [[ "$*" == *-oauth-proxy* ]]; then : > "$MOCK_STATE/proxy-created"; fi
   exit 0
 fi
 
