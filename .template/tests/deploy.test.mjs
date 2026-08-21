@@ -53,12 +53,19 @@ test("autodeploy treats the example DATABASE_URL placeholder as no database", as
 
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /still the example placeholder/);
-  assert.match(result.output, /deploying in-cluster PostgreSQL/);
-  const ocLog = await readFile(fixture.ocLog, "utf8");
-  assert.match(ocLog, /postgres\.yaml/);
   const appEnv = await readFile(fixture.appEnv, "utf8");
-  assert.match(appEnv, /DATABASE_URL=postgres:\/\/app:[^@]+@postgresql:5432\/app/);
   assert.doesNotMatch(appEnv, /USER:PASSWORD@HOST/);
+
+  // The no-database flavor ships no postgres manifest; there the placeholder is simply dropped.
+  const { existsSync } = await import("node:fs");
+  if (existsSync(path.join(fixture.directory, "deploy/openshift/postgres.yaml"))) {
+    assert.match(result.output, /deploying in-cluster PostgreSQL/);
+    const ocLog = await readFile(fixture.ocLog, "utf8");
+    assert.match(ocLog, /postgres\.yaml/);
+    assert.match(appEnv, /DATABASE_URL=postgres:\/\/app:[^@]+@postgresql:5432\/app/);
+  } else {
+    assert.match(result.output, /Database: not configured by this script/);
+  }
 });
 
 test("autodeploy stops before mutation when gh is not authenticated", async (t) => {
