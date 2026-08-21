@@ -1001,10 +1001,12 @@ if [[ "$*" == ce\ application\ get\ --name\ * ]]; then
   marker="app-created"
   if [[ "$app_name" == *-oauth-proxy ]]; then marker="proxy-created"; fi
   if [[ "$*" == *"--output json" ]]; then
-    if [[ -f "$MOCK_STATE/app-crashloop" && -f "$MOCK_STATE/$marker" ]]; then
+    # Like the real CLI: a missing application is a failure, not empty JSON.
+    [[ -f "$MOCK_STATE/$marker" ]] || exit 1
+    if [[ -f "$MOCK_STATE/app-crashloop" ]]; then
       printf '{"status":{"latestCreatedRevisionName":"%s-00002"}}\n' "$app_name"
     else
-      printf '{}\n'
+      printf '{"status":{"latestCreatedRevisionName":"%s-00001"}}\n' "$app_name"
     fi
     exit 0
   fi

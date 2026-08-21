@@ -451,7 +451,9 @@ preflight_database() {
   set -e
 
   case "$preflight_status" in
-    0) ;;
+    0)
+      info "Database preflight passed."
+      ;;
     3)
       error "DATABASE_URL points at a database that is not empty: it already has tables ($preflight_output) but no record of this app's migrations. Deploying would crash-loop at boot with 'relation ... already exists'. Point DATABASE_URL at an empty database, or empty this one first (connect with psql and run: DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;). Do not hand-edit drizzle.__drizzle_migrations to work around this."
       exit 1
@@ -462,10 +464,15 @@ preflight_database() {
   esac
 }
 
+# Prints nothing (and succeeds) when the application does not exist yet - the first
+# deploy takes its baseline before the application is created.
 latest_application_revision() {
-  ibmcloud ce application get --name "$1" --output json 2>/dev/null \
+  local output=""
+
+  output=$(ibmcloud ce application get --name "$1" --output json 2>/dev/null || true)
+  printf '%s\n' "$output" \
     | sed -n 's/.*"latestCreatedRevisionName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-    | head -n 1
+    | head -n 1 || true
 }
 
 # Kubernetes emits 'BackOff' warning events within about a minute of a container that
@@ -478,7 +485,7 @@ application_crashloop_detected() {
   local baseline_revision="$2"
   local revision=""
 
-  revision=$(latest_application_revision "$application_name")
+  revision=$(latest_application_revision "$application_name" || true)
   if [[ -z "$revision" || "$revision" == "$baseline_revision" ]]; then
     return 1
   fi
@@ -507,7 +514,7 @@ run_application_rollout() {
   local ticks=0
   local check_every="${CE_DEPLOY_ROLLOUT_CHECK_SECONDS:-20}"
 
-  baseline_revision=$(latest_application_revision "$application_name")
+  baseline_revision=$(latest_application_revision "$application_name" || true)
 
   ibmcloud ce "$@" &
   rollout_pid=$!
