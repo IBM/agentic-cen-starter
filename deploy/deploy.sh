@@ -382,6 +382,7 @@ create_app_secret() {
       -e '/^[[:space:]]*#/d' \
       -e '/^[[:space:]]*$/d' \
       -e '/^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*$/d' \
+      -e '/^DATABASE_URL=postgres:\/\/USER:PASSWORD@HOST/d' \
       "$ENV_FILE" > "$env_secret_file"
   fi
 
