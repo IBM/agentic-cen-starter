@@ -214,6 +214,7 @@ async function finalize() {
   delete scripts.flavor;
   delete scripts.typecheck;
   delete scripts["verify:flavors"];
+  delete scripts["test:template"];
   if (hadBootstrap) delete scripts.bootstrap;
   const dbGenerate = scripts["db:generate"];
   if (typeof dbGenerate === "string") {

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-const root = path.resolve(import.meta.dirname, "..");
+const root = path.resolve(import.meta.dirname, "../..");
 
 test("autodeploy uses gh + SSH and verifies namespace webhook access", async (t) => {
   const fixture = await createFixture(t);
@@ -677,12 +677,7 @@ async function createFixture(
     await rm(directory, { recursive: true, force: true });
   });
 
-  await cp(path.join(root, "deploy"), path.join(directory, "deploy"), {
-    recursive: true,
-    filter(source) {
-      return !source.endsWith("deploy.test.mjs");
-    },
-  });
+  await cp(path.join(root, "deploy"), path.join(directory, "deploy"), { recursive: true });
   await writeFile(
     path.join(directory, ".env.production"),
     [
@@ -732,12 +727,7 @@ async function createCodeEngineFixture(t, { existing = false, includeApiKey = tr
     await rm(directory, { recursive: true, force: true });
   });
 
-  await cp(path.join(root, "deploy"), path.join(directory, "deploy"), {
-    recursive: true,
-    filter(source) {
-      return !source.endsWith("deploy.test.mjs");
-    },
-  });
+  await cp(path.join(root, "deploy"), path.join(directory, "deploy"), { recursive: true });
   await writeFile(
     path.join(directory, ".env.production"),
     [

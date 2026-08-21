@@ -83,6 +83,7 @@ async function main() {
         }
 
         run(pnpm, ["verify"], workspace);
+        run(pnpm, ["test:template"], workspace);
         commit(workspace, `Configure ${label}`);
         run(pnpm, ["flavor", "finalize"], workspace);
         await assertFinalized(workspace, stagedSkills);

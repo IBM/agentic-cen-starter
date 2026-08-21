@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import containerEngine from "./container-engine.cjs";
+import containerEngine from "../../scripts/container-engine.cjs";
 
 const { resolveContainerEngine } = containerEngine;
 

@@ -23,11 +23,15 @@ assume the base's shape. After any change, verify every standalone flavor and su
 combination in disposable copies of the current working tree:
 
 ```bash
+pnpm test:template   # template-only tests: deploy scripts against mocked CLIs, dev tooling
 pnpm verify:flavors
 ```
 
-The command derives its variants from the manifests, then applies, checks, tests, and builds
-each one. A broken anchor fails loudly at the apply step, naming the anchor. When fixing
+Template-only tests live in `.template/tests/` and run via `pnpm test:template` — never
+through the project-facing `pnpm test`, which stays the project's own suite (finalize
+deletes `.template/` and the script with it). Change a deploy script, run `test:template`.
+`verify:flavors` derives its variants from the manifests, then applies, checks, tests
+(including `test:template`), and builds each one. A broken anchor fails loudly at the apply step, naming the anchor. When fixing
 manifests, prefer converting fragile `edits` into `delete` + `overlay` — anchors are the
 maintenance cost.
 

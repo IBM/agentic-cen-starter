@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Template-only tests (deploy scripts against mocked `ibmcloud`/`oc`, dev tooling) moved
+  from `deploy/` and `scripts/` to `.template/tests/`, run by `pnpm test:template`. They
+  no longer ship in bootstrapped projects: `pnpm test` is the project's own suite and
+  `pnpm verify` drops from ~36 s to ~9 s.
 - Code Engine deploys fail fast and loud instead of hanging on a broken revision:
   a watchdog watches for Kubernetes `BackOff` events while the rollout waits and stops
   the deploy within seconds of a crash-loop, and any rollout failure prints the
