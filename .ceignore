@@ -7,7 +7,14 @@ static
 **/static
 coverage
 **/coverage
-.env*
+*.env*
+.secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
 *.local
 *.log
 .DS_Store

@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Ignore rules are pattern-based for secrets: `.gitignore`, `.ceignore`, and
+  `.dockerignore` exclude every `*.env*` variant (`.env.production.ce`, `prod.env`, ...),
+  whitelisting only `.env*.example`, plus `.secrets/` and certificate/key files
+  (`*.pem`, `*.key`, `*.crt`, `*.p12`, `*.pfx`, `*.jks`). `.secrets/` was missing from the
+  build-context ignores; the Dockerfile never copied it into an image, but it no longer
+  travels in the Code Engine source upload either.
 - Template-only tests (deploy scripts against mocked `ibmcloud`/`oc`, dev tooling) moved
   from `deploy/` and `scripts/` to `.template/tests/`, run by `pnpm test:template`. They
   no longer ship in bootstrapped projects: `pnpm test` is the project's own suite and

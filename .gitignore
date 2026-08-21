@@ -3,10 +3,21 @@ dist/
 static/
 coverage/
 
-.env
-.env.production
+# Environment files: every variant is ignored by pattern (.env.production, .env.production.ce,
+# prod.env, ...); only *.example files are whitelisted. Nothing else under these names may
+# reach Git.
+*.env*
+!.env*.example
 .secrets/
 *.local
+
+# Certificates and key material (e.g. icd-ca.pem from the database TLS setup)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
 
 .DS_Store
 
