@@ -28,12 +28,11 @@ left behind.
 
 ```bash
 git clone https://github.ibm.com/client-engineering-dach/agentic-cen-starter.git my-app
-cd my-app                                 # ← name the folder after your project, not the template
 ```
 
-**With an agent (recommended):** open the folder in your AI coding tool and say what you want
-to build. It reads [AGENTS.md](AGENTS.md) and takes over: interview, bootstrap, verify,
-finalize.
+**With an agent (recommended):** open the folder (`my-app` — name it after your project, not
+the template) in your AI coding tool and say what you want to build. It reads
+[AGENTS.md](AGENTS.md) and takes over: interview, bootstrap, verify, finalize.
 
 **Yourself:**
 
