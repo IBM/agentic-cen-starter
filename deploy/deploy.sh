@@ -282,6 +282,12 @@ configure_database() {
   local postgres_password=""
 
   if database_url=$(env_file_value DATABASE_URL "$ENV_FILE"); then
+    # The example file ships a placeholder URL so the connection-string shape (incl. sslmode)
+    # is documented; left untouched it means "no external database", not a real one.
+    if [[ "$database_url" == "postgres://USER:PASSWORD@HOST"* ]]; then
+      info "DATABASE_URL in $ENV_FILE is still the example placeholder; treating it as unset."
+      database_url=""
+    fi
     if [[ -n "$database_url" ]]; then
       external_db_used=true
       info "DATABASE_URL found in $ENV_FILE; using the external database."

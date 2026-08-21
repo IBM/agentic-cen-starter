@@ -17,9 +17,13 @@ rerun. Details: `deploy/README.md`.
 
 Two things happen automatically so you don't handle them:
 
-- **Database**: if `.env.production` has no `DATABASE_URL`, `deploy.sh` deploys an in-cluster
-  PostgreSQL (pilot/demo grade) and wires the URL into the app secret itself. For real
-  engagements, set `DATABASE_URL` to a managed PostgreSQL — then nothing extra is deployed.
+- **Database**: if `.env.production` has no `DATABASE_URL` (or still the example placeholder),
+  `deploy.sh` deploys an in-cluster PostgreSQL (pilot/demo grade) and wires the URL into the
+  app secret itself. For real engagements, set `DATABASE_URL` to a managed PostgreSQL — then
+  nothing extra is deployed. The example's `postgres://USER:PASSWORD@HOST...` line is a
+  placeholder, not a value to "fill in" for OpenShift: unless the user names a managed
+  database, leave it exactly as copied and let the script report
+  "treating it as unset" → in-cluster PostgreSQL. Never invent a database URL.
 - **Migrations**: the image migrates its own schema at boot (`MIGRATE_ON_START`, default on
   in production, guarded by an advisory lock). There is no manual migration step. Teams that
   want manual control set `MIGRATE_ON_START=false` in `.env.production`.
@@ -67,8 +71,8 @@ image itself (BuildConfig + webhook), no local Docker needed:
 ```bash
 # 1. Production env — never commit this file
 cp .env.production.example .env.production   # fill in the values only you can know (secrets,
-                                             # IdP client config); leave DATABASE_URL unset for
-                                             # the in-cluster db. URL-dependent values
+                                             # IdP client config); leave DATABASE_URL as the
+                                             # placeholder for the in-cluster db. URL-dependent values
                                              # (BETTER_AUTH_URL — or OAUTH2_PROXY_REDIRECT_URL
                                              # and the cookie secret on the oauth-proxy flavor)
                                              # are derived by deploy.sh; set them only to override.

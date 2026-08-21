@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- OpenShift `deploy.sh` treats the example `DATABASE_URL` placeholder
+  (`postgres://USER:PASSWORD@HOST...`) as "no external database" and deploys the in-cluster
+  PostgreSQL again. Since the example started shipping a placeholder URL (to document the
+  `sslmode` shape), an untouched copy was mistaken for a configured database.
 - Ignore rules are pattern-based for secrets: `.gitignore`, `.ceignore`, and
   `.dockerignore` exclude every `*.env*` variant (`.env.production.ce`, `prod.env`, ...),
   whitelisting only `.env*.example`, plus `.secrets/` and certificate/key files

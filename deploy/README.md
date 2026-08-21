@@ -58,7 +58,8 @@ what depends on it — `BETTER_AUTH_URL` (or, on the oauth-proxy flavor,
 the `app-env` secret. `.env.production` is never modified; every derived value is printed in
 the deploy summary, and setting one explicitly in `.env.production` overrides derivation.
 
-**Database convention**: if `.env.production` contains no `DATABASE_URL`, the script deploys
+**Database convention**: if `.env.production` contains no `DATABASE_URL` (or still the example
+placeholder), the script deploys
 an in-cluster PostgreSQL (`deploy/openshift/postgres.yaml`, pilot/demo grade) and injects the
 generated `DATABASE_URL` into `app-env`. Set `DATABASE_URL` to use a managed PostgreSQL
 instead — recommended for production engagements.

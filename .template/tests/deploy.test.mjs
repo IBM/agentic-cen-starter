@@ -43,6 +43,24 @@ test("autodeploy uses gh + SSH and verifies namespace webhook access", async (t)
   assert.match(ocLog, /get endpoints cen-starter/);
 });
 
+test("autodeploy treats the example DATABASE_URL placeholder as no database", async (t) => {
+  // .env.production.example ships a placeholder URL to document the connection-string
+  // shape; copied untouched it must mean "deploy the in-cluster PostgreSQL", not "use it".
+  const fixture = await createFixture(t, {
+    databaseUrl: "postgres://USER:PASSWORD@HOST:5432/DATABASE?sslmode=no-verify",
+  });
+  const result = runDeploy(fixture);
+
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /still the example placeholder/);
+  assert.match(result.output, /deploying in-cluster PostgreSQL/);
+  const ocLog = await readFile(fixture.ocLog, "utf8");
+  assert.match(ocLog, /postgres\.yaml/);
+  const appEnv = await readFile(fixture.appEnv, "utf8");
+  assert.match(appEnv, /DATABASE_URL=postgres:\/\/app:[^@]+@postgresql:5432\/app/);
+  assert.doesNotMatch(appEnv, /USER:PASSWORD@HOST/);
+});
+
 test("autodeploy stops before mutation when gh is not authenticated", async (t) => {
   const fixture = await createFixture(t, { ghAuthenticated: false });
   const result = runDeploy(fixture);
@@ -669,7 +687,12 @@ test("Code Engine update reuses credentials and fully reconciles the application
 
 async function createFixture(
   t,
-  { ghAuthenticated = true, webhookRbacDenied = false, webhookRbacExists = false } = {},
+  {
+    ghAuthenticated = true,
+    webhookRbacDenied = false,
+    webhookRbacExists = false,
+    databaseUrl = "postgres://app:password@postgres.example:5432/app",
+  } = {},
 ) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "cen-deploy-test-"));
   t.after(async () => {
@@ -681,7 +704,7 @@ async function createFixture(
   await writeFile(
     path.join(directory, ".env.production"),
     [
-      "DATABASE_URL=postgres://app:password@postgres.example:5432/app",
+      `DATABASE_URL=${databaseUrl}`,
       "BETTER_AUTH_SECRET=test-secret-with-at-least-32-characters",
       "BETTER_AUTH_URL=https://cen-starter.example.com",
       "GITHUB_TOKEN=legacy-token-must-not-reach-the-app",
