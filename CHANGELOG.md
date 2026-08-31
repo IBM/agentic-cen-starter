@@ -6,6 +6,11 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- `pnpm bootstrap` now exposes its six supported configurations through the versioned
+  `.template/presets.json` catalog. Humans and installers can select one with `--preset`,
+  and tooling can discover the catalog with `--list-presets --json` instead of duplicating
+  flavor ordering rules.
+
 - OpenShift `deploy.sh` treats the example `DATABASE_URL` placeholder
   (`postgres://USER:PASSWORD@HOST...`) as "no external database" and deploys the in-cluster
   PostgreSQL again. Since the example started shipping a placeholder URL (to document the

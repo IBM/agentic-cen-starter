@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "defaultPreset": "oauth-proxy",
+  "presets": [
+    {
+      "id": "oauth-proxy",
+      "label": "Full app — company/client SSO, shadcn/ui",
+      "description": "TypeScript full stack with oauth2-proxy and the default shadcn/ui frontend.",
+      "flavors": ["oauth-proxy"]
+    },
+    {
+      "id": "oauth-proxy-carbon",
+      "label": "Full app — company/client SSO, IBM Carbon UI",
+      "description": "TypeScript full stack with oauth2-proxy and IBM Carbon.",
+      "flavors": ["oauth-proxy", "carbon"]
+    },
+    {
+      "id": "local-auth",
+      "label": "Full app — local auth, shadcn/ui",
+      "description": "TypeScript full stack with app-managed better-auth accounts and shadcn/ui.",
+      "flavors": []
+    },
+    {
+      "id": "local-auth-carbon",
+      "label": "Full app — local auth, IBM Carbon UI",
+      "description": "TypeScript full stack with app-managed better-auth accounts and IBM Carbon.",
+      "flavors": ["carbon"]
+    },
+    {
+      "id": "backend-only",
+      "label": "API only — with database",
+      "description": "Hono API with PostgreSQL and no frontend.",
+      "flavors": ["backend-only"]
+    },
+    {
+      "id": "backend-only-no-db",
+      "label": "API only — stateless",
+      "description": "Hono API with no frontend or database.",
+      "flavors": ["backend-only", "no-database"]
+    }
+  ]
+}

@@ -88,6 +88,13 @@ is required *or the pilot could plausibly become production*. Local development 
 pnpm bootstrap --name my-app --flavors oauth-proxy
 ```
 
+For tools and non-interactive setup, the starter owns stable preset IDs:
+
+```bash
+pnpm bootstrap --list-presets --json
+pnpm bootstrap --name my-app --brand "My App" --preset oauth-proxy
+```
+
 Keep the base local auth when the product itself must own accounts and credentials, or for a
 deliberately throwaway demo. How much app data hangs off a user is *not* a reason to pick
 local auth. The full decision, including production caveats:

@@ -7,6 +7,7 @@ in one piece by `pnpm flavor finalize`. Nothing here ships into a finished proje
 - `scaffold/` — the project's post-setup `AGENTS.md` and staged feature skills, promoted at
   finalization
 - `scripts/` — bootstrap, the flavor engine, the setup guard, and flavor verification
+- `presets.json` — the versioned, machine-readable set of supported bootstrap configurations
 
 Setting up a project? Your agent should read `.agents/skills/setup/SKILL.md` at the repo
 root and take it from there.

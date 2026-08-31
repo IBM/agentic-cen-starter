@@ -9,7 +9,8 @@ import { createInterface } from "node:readline/promises";
 // Post-clone bootstrap (run as `pnpm bootstrap`, or by create-cen-app). One-time by design:
 // refuses to run twice and is deleted by `pnpm flavor finalize`.
 // ("setup" would shadow pnpm's own builtin `pnpm setup` command — don't rename it back.)
-// Usage: pnpm bootstrap [--name <project-name>] [--brand <display-name>] [--flavors <a,b|none>]
+// Usage: pnpm bootstrap [--name <project-name>] [--brand <display-name>]
+//                       [--preset <id> | --flavors <a,b|none>]
 
 const root = path.resolve(import.meta.dirname, "../..");
 const require = createRequire(import.meta.url);
@@ -18,6 +19,9 @@ const { resolveContainerEngine } = require("../../scripts/container-engine.cjs")
 };
 
 const args = process.argv.slice(2);
+type Preset = { id: string; label: string; description: string; flavors: string[] };
+type PresetCatalog = { schemaVersion: number; defaultPreset: string; presets: Preset[] };
+
 function flag(name: string) {
   const index = args.indexOf(`--${name}`);
   return index !== -1 ? args[index + 1] : undefined;
@@ -62,6 +66,21 @@ function tryGit(argv: string[]) {
 }
 
 async function main() {
+  const catalog = JSON.parse(
+    await readFile(path.join(root, ".template/presets.json"), "utf8"),
+  ) as PresetCatalog;
+
+  if (args.includes("--list-presets")) {
+    if (args.includes("--json")) console.log(JSON.stringify(catalog, null, 2));
+    else {
+      for (const preset of catalog.presets) {
+        const marker = preset.id === catalog.defaultPreset ? " (default)" : "";
+        console.log(`${preset.id}${marker}\n  ${preset.label}\n  ${preset.description}`);
+      }
+    }
+    return;
+  }
+
   // --- refuse to run twice -----------------------------------------------
   const pkgPath = path.join(root, "package.json");
   const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
@@ -180,26 +199,13 @@ async function main() {
   }
 
   // --- flavors (optional here; the agent-guided interview is the main path) -
-  // Humans pick from the closed set of valid configurations — free-form flavor lists (with
-  // their ordering rules) stay available via --flavors for agents and scripts.
-  const presets = [
-    {
-      label: "Full app — company/client SSO (OAuth proxy), shadcn/ui (recommended)",
-      flavors: ["oauth-proxy"],
-    },
-    {
-      label: "Full app — company/client SSO (OAuth proxy), IBM Carbon UI",
-      flavors: ["oauth-proxy", "carbon"],
-    },
-    { label: "Full app — local auth (better-auth, app-managed accounts), shadcn/ui", flavors: [] },
-    { label: "Full app — local auth (better-auth), IBM Carbon UI", flavors: ["carbon"] },
-    { label: "API only — with database, no frontend", flavors: ["backend-only"] },
-    {
-      label: "API only — stateless, no frontend or database",
-      flavors: ["backend-only", "no-database"],
-    },
-  ];
+  // Humans and create-cen-app share the closed preset catalog. Free-form flavor lists stay
+  // available for agents and maintenance scripts.
+  const presetArg = flag("preset");
   const flavorsArg = flag("flavors");
+  if (presetArg !== undefined && flavorsArg !== undefined) {
+    fail("Pass either --preset or --flavors, not both.");
+  }
   let chosen: string[] = [];
   let available: string[] = [];
   try {
@@ -208,20 +214,30 @@ async function main() {
   } catch {
     // .template/flavors/ gone — nothing to offer
   }
-  if (flavorsArg !== undefined) {
+  if (presetArg !== undefined) {
+    const preset = catalog.presets.find((candidate) => candidate.id === presetArg);
+    if (!preset) {
+      fail(
+        `Unknown preset "${presetArg}". Available: ${catalog.presets.map((item) => item.id).join(", ")}`,
+      );
+    }
+    chosen = preset.flavors;
+  } else if (flavorsArg !== undefined) {
     chosen = flavorsArg === "none" ? [] : flavorsArg.split(",").map((f) => f.trim());
     const unknown = chosen.filter((f) => !available.includes(f));
     if (unknown.length)
       fail(`Unknown flavor(s): ${unknown.join(", ")}. Available: ${available.join(", ")}`);
   } else if (available.length) {
-    const menu = presets.filter((p) => p.flavors.every((f) => available.includes(f)));
+    const menu = catalog.presets.filter((p) => p.flavors.every((f) => available.includes(f)));
     console.log("\nWhich setup do you want?");
     for (const [i, preset] of menu.entries()) console.log(`  ${i + 1}) ${preset.label}`);
     console.log("Tip: or let your AI agent walk you through it (it reads .agents/skills/setup/).");
     let picked: string[] | undefined;
     while (picked === undefined) {
-      const answer = (await ask("Choice [1]: ")).trim();
-      const index = answer === "" ? 1 : Number(answer);
+      const defaultIndex = menu.findIndex((preset) => preset.id === catalog.defaultPreset);
+      const choice = defaultIndex === -1 ? 1 : defaultIndex + 1;
+      const answer = (await ask(`Choice [${choice}]: `)).trim();
+      const index = answer === "" ? choice : Number(answer);
       const preset = Number.isInteger(index) ? menu[index - 1] : undefined;
       if (preset) picked = preset.flavors;
       else console.log(`Enter a number between 1 and ${menu.length}.`);

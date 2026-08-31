@@ -9,6 +9,8 @@ type FlavorManifest = {
   combinesWith?: string[];
 };
 
+type Preset = { id: string; flavors: string[] };
+
 const root = process.cwd();
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const ignoredDirectories = new Set([".git", ".codex", "coverage", "dist", "node_modules"]);
@@ -16,6 +18,7 @@ const ignoredFiles = new Set([".env", ".env.production"]);
 
 async function main() {
   const variants = await flavorVariants(onlyFilter());
+  const presets = await readPresets();
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "cen-flavor-check-"));
   let failed = false;
 
@@ -49,6 +52,10 @@ async function main() {
           expectFailure(pnpm, ["db:generate"], workspace, "setup mode");
         }
 
+        const preset = presets.find((candidate) => sameFlavors(candidate.flavors, names));
+        const selection = preset
+          ? ["--preset", preset.id]
+          : ["--flavors", names.length ? names.join(",") : "none"];
         run(
           pnpm,
           [
@@ -58,8 +65,7 @@ async function main() {
             // bootstrap's stale-volume guard would (correctly) refuse.
             "--name",
             names.length ? `flavor-check-${label.replaceAll(" + ", "-")}` : "flavor-check-base",
-            "--flavors",
-            names.length ? names.join(",") : "none",
+            ...selection,
           ],
           workspace,
         );
@@ -376,6 +382,18 @@ async function readManifests() {
       return manifest;
     }),
   );
+}
+
+async function readPresets(): Promise<Preset[]> {
+  const catalog = JSON.parse(await readFile(path.join(root, ".template/presets.json"), "utf8")) as {
+    presets?: Preset[];
+  };
+  if (!Array.isArray(catalog.presets)) throw new Error("Preset catalog has no presets array.");
+  return catalog.presets;
+}
+
+function sameFlavors(left: string[], right: string[]) {
+  return left.length === right.length && left.every((flavor, index) => flavor === right[index]);
 }
 
 async function copySource(target: string) {
