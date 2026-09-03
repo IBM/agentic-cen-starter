@@ -45,8 +45,10 @@ that cannot sensibly be choices, such as a new name or URL. Never ask for creden
   they have no cluster or namespace, ask their engagement or tech lead for the assigned
   target; do not invent or provision one.
 - **Auto-deploy path**: inspect `origin`, its remote heads, and the current upstream first.
-  Respect an existing GitHub host and repository. If there is no project repository, offer
-  to create it and explicitly confirm host, owner, name, and visibility; recommend
+  `origin` must be the project repository and `upstream` the fetch-only starter; if `origin`
+  points to the starter, stop and repair the remotes rather than pushing or deploying.
+  Respect an existing project GitHub host and repository. If there is no project repository,
+  offer to create it and explicitly confirm host, owner, name, and visibility; recommend
   `github.ibm.com` + private for IBM work. Check `gh --version` and
   `gh auth status --hostname <host>` before saying creation or administration is unavailable.
   Browser login is `gh auth login --hostname <host> --web`; never request a GitHub token.

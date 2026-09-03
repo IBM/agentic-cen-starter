@@ -29,6 +29,11 @@ pnpm install
 pnpm bootstrap    # asks for the app's name, then a numbered menu of valid setups
 ```
 
+Bootstrap reserves `origin` for this project and configures the starter as a fetch-only
+`upstream`. If the project has no repository yet, `origin` remains absent and a normal push
+fails safely. After setup is finalized, your agent offers to create a repository or connect
+an existing one before pushing.
+
 The menu is the whole configuration decision — pick by what your project is, not by
 technology. Unsure? Option 1 (OAuth proxy + shadcn/ui) is the production-ready default.
 

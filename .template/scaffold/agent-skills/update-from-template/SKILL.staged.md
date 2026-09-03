@@ -6,6 +6,7 @@ description: Pull improvements from the CEN Starter template into a project crea
 # Update from the template
 
 Projects keep the template reachable as the `upstream` remote (`pnpm bootstrap` set that up).
+It is fetch-only: never push project commits to it. The project's repository is `origin`.
 Template releases are documented in its CHANGELOG.md — read it before merging anything.
 
 ## Preflight

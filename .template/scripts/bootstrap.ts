@@ -17,6 +17,9 @@ const require = createRequire(import.meta.url);
 const { resolveContainerEngine } = require("../../scripts/container-engine.cjs") as {
   resolveContainerEngine(options?: { required?: boolean }): "docker" | "podman" | undefined;
 };
+const { configureProjectRemotes } = require("./git-remotes.cjs") as {
+  configureProjectRemotes(options: { cwd: string }): { origin: string | null; upstream: string };
+};
 
 const args = process.argv.slice(2);
 type Preset = { id: string; label: string; description: string; flavors: string[] };
@@ -51,18 +54,6 @@ function kebabCase(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function tryGit(argv: string[]) {
-  try {
-    return execFileSync("git", argv, {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  } catch {
-    return null;
-  }
 }
 
 async function main() {
@@ -176,6 +167,15 @@ async function main() {
     }
   }
 
+  // --- remotes: template is fetch-only; origin belongs to the project -----
+  // Do this before changing tracked files. Ambiguous remote configurations fail cleanly,
+  // and every successful path is rechecked by the helper before setup continues.
+  try {
+    configureProjectRemotes({ cwd: root });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+
   pkg.name = name;
   const composePath = path.join(root, "docker-compose.yml");
   try {
@@ -183,19 +183,6 @@ async function main() {
     await writeFile(composePath, compose.replace(/^name: .*$/m, `name: ${name}`));
   } catch {
     // no compose file (flavored away) — fine
-  }
-
-  // --- remotes: template stays reachable as `upstream` ---------------------
-  const origin = tryGit(["remote", "get-url", "origin"]);
-  if (origin && tryGit(["remote", "get-url", "upstream"]) === null) {
-    tryGit(["remote", "rename", "origin", "upstream"]);
-    tryGit(["remote", "set-url", "--push", "upstream", "DISABLED"]);
-    const branch = tryGit(["branch", "--show-current"]);
-    if (branch && tryGit(["config", "--get", `branch.${branch}.remote`]) === "upstream") {
-      tryGit(["branch", "--unset-upstream"]);
-    }
-    console.log(`✓ Kept the template as fetch-only remote upstream;`);
-    console.log("  add your project's own repo as origin when you have one.");
   }
 
   // --- flavors (optional here; the agent-guided interview is the main path) -

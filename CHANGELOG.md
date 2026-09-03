@@ -10,6 +10,11 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
   `.template/presets.json` catalog. Humans and installers can select one with `--preset`,
   and tooling can discover the catalog with `--list-presets --json` instead of duplicating
   flavor ordering rules.
+- `pnpm bootstrap` now reserves `origin` for the project repository and makes the starter a
+  fetch-only `upstream`. It preserves an existing project origin, removes a duplicate
+  template origin, refuses unrelated remotes occupying `upstream`, disables all upstream
+  push URLs, and leaves projects without an origin unable to push accidentally. Setup offers
+  to create or connect the project repository after finalization.
 
 - OpenShift `deploy.sh` treats the example `DATABASE_URL` placeholder
   (`postgres://USER:PASSWORD@HOST...`) as "no external database" and deploys the in-cluster

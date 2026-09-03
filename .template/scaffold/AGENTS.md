@@ -45,6 +45,10 @@ Database data survives `pnpm dev` shutdowns in the Compose volume.
     options, use the environment's question tool if available, one decision at a time, with
     the recommendation first. Ask free-form only for genuinely open-ended values; do not
     invent choices, request secrets in chat, or ask what you can discover yourself.
+11. **Git remotes have fixed roles.** `origin` is the project's repository; `upstream` is the
+    fetch-only CEN Starter template. Inspect both before publishing or deploying, never push
+    project commits to `upstream`, and stop to repair the configuration if `origin` points to
+    the starter.
 
 ## Pitfalls
 

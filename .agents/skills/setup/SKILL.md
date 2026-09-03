@@ -148,10 +148,13 @@ pnpm bootstrap --name <project-name> [--brand "<Display Name>"] --flavors <comma
 Pass the app name from the interview verbatim as `--brand` and its kebab-cased form as
 `--name`. Bootstrap names the package and Compose project, rewrites the visible app name
 (layout headers, browser tab title, API docs title, Dex login screen) from "CEN Starter"
-to the brand (without `--brand` it falls back to title-casing the package name), preserves
-the template remote as `upstream`, applies all chosen flavors in one validated operation,
-creates `.env` from the resulting `.env.example`, and sets `cen.bootstrapped` only after
-every step succeeds. On a fresh clone, do not copy `.env` or run flavor commands
+to the brand (without `--brand` it falls back to title-casing the package name), reserves
+`origin` for the project's repository and keeps the template as a fetch-only `upstream`,
+applies all chosen flavors in one validated operation, creates `.env` from the resulting
+`.env.example`, and sets `cen.bootstrapped` only after every step succeeds. A bare push then
+targets only `origin`; until the project has one, it fails safely. Bootstrap preserves an
+existing project `origin` and refuses an unrelated remote already named `upstream` rather
+than guessing or overwriting it. On a fresh clone, do not copy `.env` or run flavor commands
 separately first.
 
 Supported combinations are declared in the manifests (`combinesWith`) and **order matters**:
@@ -236,6 +239,10 @@ Publishing is optional and never implicit. After finalization, inspect `git remo
 origin`, the current branch/upstream, and the remote heads before asking anything. If `origin`
 already points to the project's repository, report whether the current commit is pushed and
 do not propose creating another repository.
+
+`origin` is reserved for the project; `upstream` is the fetch-only template source. If either
+name violates that invariant, stop and repair the remotes before publishing — never push a
+project commit to the template repository.
 
 If no project `origin` exists, offer to create and push one. For IBM work, recommend
 `github.ibm.com`, the configured project name, and private visibility, but explicitly confirm

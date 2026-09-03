@@ -42,6 +42,11 @@ pnpm bootstrap    # asks for the app's name, then a numbered menu of valid setup
 pnpm dev          # http://localhost:5173 — sign in: admin@example.com / changethis
 ```
 
+Bootstrap keeps the starter as a fetch-only `upstream` remote and reserves `origin` for your
+project. If you have not connected a project repository yet, `origin` stays absent so an
+accidental push cannot reach the starter; after finalization, the agent offers to create or
+connect the project repository and push it.
+
 Needs Node ≥ 22, pnpm, and Docker or Podman with Compose. Prerequisites, finalization and
 troubleshooting: **[docs/getting-started.md](docs/getting-started.md)**.
 
