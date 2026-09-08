@@ -6,7 +6,7 @@
 
 # Agentic CEN Starter
 
-**The full-stack starter for the agent era.** Clone it, tell your AI coding agent what you're
+**The full-stack starter for the agent era.** Create a project, tell your AI coding agent what you're
 building, and minutes later you have a running TypeScript app — Postgres, auth, admin panel,
 type-safe from database to browser — shaped for your project, with no template scaffolding
 left behind.
@@ -15,7 +15,7 @@ left behind.
 
 ## How it works
 
-1. **Clone it.** You get a complete, running app — database, auth, admin panel, typed API —
+1. **Scaffold it.** You get a complete, running app — database, auth, admin panel, typed API —
    not an empty skeleton waiting to be assembled.
 2. **Your agent interviews you** in product terms: who signs in, is there a database, which
    design system. Then it applies the matching setup — full-stack or backend-only, shadcn/ui
@@ -27,18 +27,24 @@ left behind.
 ## Start a project
 
 ```bash
-git clone https://github.ibm.com/client-engineering-dach/agentic-cen-starter.git my-app
+pnpm create cen-app@latest my-app
 ```
 
-**With an agent (recommended):** open the folder (`my-app` — name it after your project, not
-the template) in your AI coding tool and say what you want to build. It reads
+The CLI clones the public starter, installs its dependencies, and offers guided or preset
+setup. **With an agent (recommended):** choose guided setup, then open the folder (`my-app` —
+name it after your project, not the template) in your AI coding tool and say what you want to build. It reads
 [AGENTS.md](AGENTS.md) and takes over: interview, bootstrap, verify, finalize.
 
-**Yourself:**
+To select agent-guided setup directly:
 
 ```bash
-pnpm install
-pnpm bootstrap    # asks for the app's name, then a numbered menu of valid setups
+pnpm create cen-app@latest my-app -- --starter agentic --mode guided
+cd my-app
+```
+
+After setup:
+
+```bash
 pnpm dev          # http://localhost:5173 — sign in: admin@example.com / changethis
 ```
 

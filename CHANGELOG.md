@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Public installation now starts with `pnpm create cen-app@latest`; the CLI clones the
+  public GitHub repository instead of requiring access to the private IBM GitHub instance.
 - `pnpm bootstrap` now exposes its six supported configurations through the versioned
   `.template/presets.json` catalog. Humans and installers can select one with `--preset`,
   and tooling can discover the catalog with `--list-presets --json` instead of duplicating
