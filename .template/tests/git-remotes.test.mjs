@@ -51,6 +51,7 @@ test("normalizes SSH and HTTPS forms to the same repository identity", () => {
     normalizeRepositoryUrl("git@github.ibm.com:client-engineering-dach/agentic-cen-starter.git"),
     "github.ibm.com/client-engineering-dach/agentic-cen-starter",
   );
+  assert.ok(isTemplateRepository("git@github.com:IBM/agentic-cen-starter.git"));
   assert.ok(isTemplateRepository("ssh://git@github.com/felixpahlke/cen-starter.git"));
 });
 

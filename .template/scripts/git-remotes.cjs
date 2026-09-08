@@ -4,6 +4,7 @@ const { execFileSync } = require("node:child_process");
 // Compare normalized repository identities so SSH and HTTPS clones are treated alike.
 const templateRepositories = Object.freeze([
   "https://github.ibm.com/client-engineering-dach/agentic-cen-starter.git",
+  "https://github.com/IBM/agentic-cen-starter.git",
   "https://github.com/felixpahlke/cen-starter.git",
 ]);
 const defaultTemplateRepository = templateRepositories[1];
