@@ -1,6 +1,6 @@
 const { execFileSync } = require("node:child_process");
 
-// Both documented distribution points are the starter itself, never a project's origin.
+// The official repository and legacy distribution points are never a project's origin.
 // Compare normalized repository identities so SSH and HTTPS clones are treated alike.
 const templateRepositories = Object.freeze([
   "https://github.ibm.com/client-engineering-dach/agentic-cen-starter.git",
@@ -39,9 +39,7 @@ function isTemplateRepository(value) {
   return identity !== null && templateIdentities.has(identity);
 }
 
-function preferredTemplateRepository(projectUrl) {
-  const identity = normalizeRepositoryUrl(projectUrl);
-  if (identity?.startsWith("github.ibm.com/")) return templateRepositories[0];
+function preferredTemplateRepository() {
   return defaultTemplateRepository;
 }
 
@@ -80,16 +78,19 @@ function configureProjectRemotes({ cwd, log = console.log }) {
   if (originIsTemplate) {
     if (upstreamIsTemplate) {
       git(cwd, ["remote", "remove", "origin"]);
-      log("✓ Removed the duplicate template origin; kept the existing upstream remote.");
+      log("✓ Removed the duplicate template origin.");
     } else {
       git(cwd, ["remote", "rename", "origin", "upstream"]);
       log("✓ Moved the template remote from origin to upstream.");
     }
   } else if (!upstream) {
-    const templateUrl = preferredTemplateRepository(origin);
+    const templateUrl = preferredTemplateRepository();
     git(cwd, ["remote", "add", "upstream", templateUrl]);
     log(`✓ Added the template as upstream (${templateUrl}).`);
   }
+
+  // Migrate recognized legacy clones too, regardless of where the project is hosted.
+  git(cwd, ["remote", "set-url", "upstream", defaultTemplateRepository]);
 
   // An invalid push URL makes even an explicit `git push upstream` fail. Replacing all
   // existing push URLs prevents a second configured URL from remaining usable.

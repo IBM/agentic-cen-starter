@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Remediate the dependency alerts in IBM security notification #1: raise the Hono,
+  Node adapter, and Vitest minimum versions, refresh vulnerable transitive dependencies,
+  and override the vulnerable esbuild ranges still requested by Drizzle's legacy loader
+  and tsup.
+- Bootstrap now uses the official `IBM/agentic-cen-starter` repository for every project's
+  fetch-only template upstream, including internal IBM projects and recognized legacy clones.
 - Public installation now starts with `pnpm create cen-app@latest`; the CLI clones
   `IBM/agentic-cen-starter` instead of requiring access to the private IBM GitHub instance.
 - `pnpm bootstrap` now exposes its six supported configurations through the versioned

@@ -23,7 +23,7 @@ it to `docker` or `podman` when both are installed.
 ## Set up the project
 
 ```bash
-git clone https://github.com/felixpahlke/cen-starter.git my-app   # folder = your project name
+git clone https://github.com/IBM/agentic-cen-starter.git my-app   # folder = your project name
 cd my-app
 pnpm install
 pnpm bootstrap    # asks for the app's name, then a numbered menu of valid setups

@@ -64,13 +64,13 @@ test("moves a cloned template origin to fetch-only upstream", async (t) => {
   configureProjectRemotes({ cwd, log() {} });
 
   assert.equal(remoteUrl(cwd, "origin"), null);
-  assert.equal(remoteUrl(cwd, "upstream"), templateRepositories[0]);
+  assert.equal(remoteUrl(cwd, "upstream"), templateRepositories[1]);
   assert.equal(remoteUrl(cwd, "upstream", true), "DISABLED");
   assert.equal(git(cwd, ["config", "--get", "branch.main.remote"], true), null);
   assert.equal(git(cwd, ["config", "--get", "remote.pushDefault"]), "origin");
 });
 
-test("keeps a project origin and adds the matching template upstream", async (t) => {
+test("keeps an internal project origin and adds the official IBM template upstream", async (t) => {
   const cwd = await repository();
   t.after(() => rm(cwd, { recursive: true, force: true }));
   const project = "git@github.ibm.com:example/my-app.git";
@@ -80,7 +80,7 @@ test("keeps a project origin and adds the matching template upstream", async (t)
   configureProjectRemotes({ cwd, log() {} });
 
   assert.equal(remoteUrl(cwd, "origin"), project);
-  assert.equal(remoteUrl(cwd, "upstream"), templateRepositories[0]);
+  assert.equal(remoteUrl(cwd, "upstream"), templateRepositories[1]);
   assert.equal(remoteUrl(cwd, "upstream", true), "DISABLED");
   assert.equal(git(cwd, ["config", "--get", "branch.main.remote"]), "origin");
 });
@@ -127,6 +127,25 @@ test("adds a public upstream when a copied checkout has no remotes", async (t) =
   assert.equal(remoteUrl(cwd, "origin"), null);
   assert.equal(remoteUrl(cwd, "upstream"), templateRepositories[1]);
   assert.equal(remoteUrl(cwd, "upstream", true), "DISABLED");
+});
+
+test("migrates legacy upstreams to IBM without changing the project origin", async (t) => {
+  for (const legacy of [templateRepositories[0], templateRepositories[2]]) {
+    const cwd = await repository();
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const project = "https://github.com/example/my-app.git";
+    git(cwd, ["remote", "add", "origin", project]);
+    git(cwd, ["remote", "add", "upstream", legacy]);
+    track(cwd, "origin");
+
+    configureProjectRemotes({ cwd, log() {} });
+    configureProjectRemotes({ cwd, log() {} });
+
+    assert.equal(remoteUrl(cwd, "origin"), project);
+    assert.equal(remoteUrl(cwd, "upstream"), templateRepositories[1]);
+    assert.equal(remoteUrl(cwd, "upstream", true), "DISABLED");
+    assert.equal(git(cwd, ["config", "--get", "branch.main.remote"]), "origin");
+  }
 });
 
 test("refuses to replace an unrelated upstream", async (t) => {

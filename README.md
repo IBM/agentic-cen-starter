@@ -6,6 +6,8 @@
 
 # Agentic CEN Starter
 
+The official repository is [IBM/agentic-cen-starter](https://github.com/IBM/agentic-cen-starter).
+
 **The full-stack starter for the agent era.** Create a project, tell your AI coding agent what you're
 building, and minutes later you have a running TypeScript app — Postgres, auth, admin panel,
 type-safe from database to browser — shaped for your project, with no template scaffolding
