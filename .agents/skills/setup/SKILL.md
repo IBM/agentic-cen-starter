@@ -90,8 +90,8 @@ connected tools can answer.
 ### The decision tree — the only configurations that exist
 
 The configuration space is exactly: **base**, `carbon`, `oauth-proxy`, `backend-only`,
-`no-database`, and the combos `oauth-proxy,carbon` and `backend-only,no-database`. Every
-recommendation is one of these outcomes. Never offer or accept an option outside them — in
+and the combos `oauth-proxy,carbon`, `backend-only,no-database`, and `backend-only,mcp`.
+Every recommendation is one of these outcomes. Never offer or accept an option outside them — in
 particular there is **no "no auth" configuration** for browser apps: every browser variant
 ships working sign-in (local auth with a seeded development account, or the OAuth proxy),
 and it costs the user nothing.
@@ -128,9 +128,14 @@ answered ("I want to build a web app" settles question 1 — never re-ask it or 
    your (or the client's) own brand?" IBM-internal asset or Carbon compliance → `carbon`
    (with the proxy from 2: `--flavors oauth-proxy,carbon`). Client-branded or unsure →
    keep the base shadcn/ui; it's ownable code, restyled freely to the client's brand.
-4. **Service state?** (service path only) "Does the service store data of its own?"
-   Yes → keep the database (`backend-only`). Stateless tools or pure orchestration →
-   `--flavors backend-only,no-database`.
+4. **What kind of service?** (service path only) Offer exactly these options, the
+   agent option first (and marked recommended) whenever the user mentioned agents,
+   watsonx Orchestrate, or MCP:
+   - "Tools an AI agent calls — watsonx Orchestrate or another MCP client — with data of
+     its own" → `--flavors backend-only,mcp`. Read `references/mcp.md` first.
+   - "An API other software calls, with data of its own" → `backend-only`.
+   - "A stateless API — pure orchestration or proxying, no data of its own" →
+     `--flavors backend-only,no-database`.
 
 When in doubt, keep the base: subtracting later is documented in each reference file,
 re-adding is manual work. The one deliberate bias is question 2 — default to `oauth-proxy`
@@ -158,8 +163,9 @@ than guessing or overwriting it. On a fresh clone, do not copy `.env` or run fla
 separately first.
 
 Supported combinations are declared in the manifests (`combinesWith`) and **order matters**:
-the combining flavor goes last (`oauth-proxy,carbon`, `backend-only,no-database`). Everything
-else is refused with an explanation. If bootstrap fails, stop and repair or reset the setup;
+the combining flavor goes last (`oauth-proxy,carbon`, `backend-only,no-database`,
+`backend-only,mcp`). Everything else is refused with an explanation. If bootstrap fails,
+stop and repair or reset the setup;
 do not build features in a partially configured tree.
 
 After bootstrap, run the post-apply checks from each selected flavor's
@@ -205,6 +211,8 @@ frontend if present, and exercise the actual auth boundary:
   role. Do not treat opening Vite directly on `WEB_PORT` as an auth test.
 - **`no-database`:** there is deliberately no human account; verify a protected endpoint
   with `x-api-key: $API_KEY` instead.
+- **`mcp`:** no human account either; list the tools through `/mcp` with the `API_KEY`
+  from `.env` (the request is in `references/mcp.md`) and call `create_note` once.
 
 Do not finalize merely because typechecking and builds pass: the configured runtime login or
 API-key path must work. Then run the full baseline verification and commit the configured

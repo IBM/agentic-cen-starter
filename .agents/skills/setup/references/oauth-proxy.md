@@ -52,6 +52,13 @@ shell). Declared in the manifest.
   Promote other users by setting `role = 'admin'` on their row (`pnpm db:studio`). The admin
   UI and settings pages are removed (the IdP owns identity); `role` still drives API authz.
 - Frontend gets the session from `GET /api/me`; sign-out goes to `/oauth2/sign_out`.
+- **Software callers** (an agent, another backend) cannot sign in through the proxy. Give
+  them routes built with `apiKeyRouter()` under one dedicated prefix (e.g. `/api/agent/`),
+  set `API_KEY`, and let the proxy pass exactly that prefix through:
+  `OAUTH2_PROXY_SKIP_AUTH_ROUTES=^/api/agent/` in `.env.production` (and in the Compose
+  proxy for local tests). Keep the pattern that narrow: on a skipped route the proxy
+  authenticates nobody, so a pattern that also covers `protectedRouter()` routes would let
+  callers send their own identity headers.
 
 ## User data and additional claims
 

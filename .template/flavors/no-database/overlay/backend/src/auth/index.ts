@@ -1,6 +1,12 @@
 // @ts-nocheck — template overlay; this line is stripped when `pnpm flavor apply` copies the file into place
 import type { Context, MiddlewareHandler } from "hono";
-import { env } from "../env";
+import { getClient } from "./api-key";
+
+export { type Client, type ClientEnv, getClient, requireApiKey } from "./api-key";
+
+// The auth seam, API key only: without persistence there are no user accounts. A request
+// carrying API_KEY (see ./api-key) gets a synthetic admin session, so code written against
+// getSession/requireAuth keeps working; new machine routes use apiKeyRouter() instead.
 
 export type Session = {
   user: {
@@ -27,7 +33,7 @@ const apiSession: Session = {
 };
 
 export async function getSession(c: Context): Promise<Session | null> {
-  return c.req.header("x-api-key") === env.API_KEY ? apiSession : null;
+  return getClient(c) ? apiSession : null;
 }
 
 export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {

@@ -1,7 +1,7 @@
 {
   "name": "carbon",
   "description": "Swap the shadcn/ui frontend for IBM Carbon (@carbon/react): UI Shell layout, Carbon components on every page, g10/g90 theme zones, and Carbon tokens exposed to Tailwind.",
-  "conflicts": ["no-database", "backend-only"],
+  "conflicts": ["backend-only", "mcp", "no-database"],
   "combinesWith": ["oauth-proxy"],
   "requires": [],
   "delete": [

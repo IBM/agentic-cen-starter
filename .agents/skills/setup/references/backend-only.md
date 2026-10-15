@@ -35,8 +35,9 @@ remains is Hono + Swagger + the API-key auth stub — zero Docker, single tiny c
    `curl localhost:3000/api/health` and open `/api/docs`.
 3. Verify a better-auth cookie session through `/api/auth/*` with the seeded development
    admin `admin@example.com` / `changethis`. Tell your user that other clients authenticate
-   through the same REST endpoints; API-key or token auth is a customization on the auth seam
-   (`backend/src/auth/`).
+   through the same REST endpoints, and that software callers (agents, other backends) use
+   routes built with `apiKeyRouter()` and `API_KEY` instead. Tools for an AI agent are the
+   `mcp` flavor (`--flavors backend-only,mcp`).
 
 ## Retrofitting late (flavor no longer applies)
 

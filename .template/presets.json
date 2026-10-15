@@ -37,6 +37,12 @@
       "label": "API only — stateless",
       "description": "Hono API with no frontend or database.",
       "flavors": ["backend-only", "no-database"]
+    },
+    {
+      "id": "mcp",
+      "label": "MCP server — agent tools with database",
+      "description": "MCP server for watsonx Orchestrate and other agents: API-key protected /mcp endpoint with PostgreSQL.",
+      "flavors": ["backend-only", "mcp"]
     }
   ]
 }

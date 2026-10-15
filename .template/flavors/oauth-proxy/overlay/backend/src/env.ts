@@ -14,6 +14,8 @@ const EnvSchema = z.object({
   DATABASE_URL: z.url(),
   DATABASE_CA_CERT: z.string().optional(),
   MIGRATE_ON_START: z.enum(["true", "false"]).optional(),
+  // Optional machine access (apiKeyRouter); unset means machine routes answer 401.
+  API_KEY: z.string().min(32).optional(),
 });
 
 // In dev, .env lives at the repo root; in production, real env vars are set by the platform.

@@ -8,7 +8,7 @@ const catalog = JSON.parse(await readFile(path.join(root, ".template/presets.jso
 
 test("preset catalog is complete and internally valid", async () => {
   assert.equal(catalog.schemaVersion, 1);
-  assert.equal(catalog.presets.length, 6);
+  assert.equal(catalog.presets.length, 7);
 
   const ids = catalog.presets.map((preset) => preset.id);
   assert.equal(new Set(ids).size, ids.length, "preset ids must be unique");

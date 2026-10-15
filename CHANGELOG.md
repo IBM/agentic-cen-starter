@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- **API keys everywhere.** Every configuration now ships `requireApiKey` / `apiKeyRouter()`
+  (`backend/src/auth/api-key.ts`) for routes that software calls: `API_KEY` (optional,
+  >= 32 characters) as `x-api-key` or `Authorization: Bearer`, compared in constant time,
+  with its own `client` principal next to user sessions. The no-database stub uses the same
+  guard, so its `API_KEY` must now be at least 32 characters.
+- **New `mcp` flavor** (`--flavors backend-only,mcp`, preset `mcp`): an MCP server for
+  watsonx Orchestrate and other agents — stateless Streamable HTTP endpoint at `/mcp`
+  behind the API key, PostgreSQL kept, better-auth removed, reference note tools with an
+  in-process MCP client test, and an `add-tool` skill. Seven presets now.
+- **Code Engine deploy:** `CE_APP_VISIBILITY` overrides the app's visibility (refused on
+  oauth-proxy). Each app now uses its own `<app-name>-env` secret instead of the
+  project-wide `app-env`, so two apps can share a project; existing apps are moved off
+  `app-env` on their next deploy. The preflight rejects an `API_KEY` shorter than 32
+  characters.
 - Remediate the dependency alerts in IBM security notification #1: raise the Hono,
   Node adapter, and Vitest minimum versions, refresh vulnerable transitive dependencies,
   and override the vulnerable esbuild ranges still requested by Drizzle's legacy loader

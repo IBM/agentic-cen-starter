@@ -15,6 +15,8 @@ const EnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
   MIGRATE_ON_START: z.enum(["true", "false"]).optional(),
+  // Optional machine access (apiKeyRouter); unset means machine routes answer 401.
+  API_KEY: z.string().min(32).optional(),
 });
 
 // In dev, .env lives at the repo root; in production, real env vars are set by the platform.

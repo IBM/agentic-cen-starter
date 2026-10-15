@@ -35,7 +35,7 @@ Things that happen automatically so you don't handle them:
 - **Migrations**: the image migrates its own schema at boot (`MIGRATE_ON_START`, production
   default, advisory-locked). No manual step.
 - **URL-dependent env**: the script reads the real app URL from Code Engine and injects
-  derived values into the `app-env` secret, then rolls a revision — `BETTER_AUTH_URL`, or on
+  derived values into the app's `<app-name>-env` secret, then rolls a revision — `BETTER_AUTH_URL`, or on
   the oauth-proxy flavor `OAUTH2_PROXY_REDIRECT_URL` + `OAUTH2_PROXY_UPSTREAMS` + a
   generated-once cookie secret. `.env.production` is never modified; explicit values there
   override derivation.

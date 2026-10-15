@@ -5,12 +5,18 @@ set -euo pipefail
 # The template's own name is the fallback for un-bootstrapped checkouts and tests.
 APP_NAME="$(node -p 'require("./package.json").name || ""' 2>/dev/null | tr '._' '--' || true)"
 APP_NAME="${APP_NAME:-cen-starter}"
-APP_SECRET="app-env"
+# One secret per app: two starter apps in one Code Engine project must not share settings.
+APP_SECRET="${APP_NAME}-env"
+# Earlier template versions used this project-wide name for every app; redeploys migrate off it.
+LEGACY_APP_SECRET="app-env"
 ENV_FILE=".env.production"
 REGISTRY_SERVER="icr.io"
 IMAGE_NAME="$APP_NAME"
 REGISTRY_SECRET="${APP_NAME}-registry"
 APP_VISIBILITY="public"
+# CE_APP_VISIBILITY may override the visibility above. Flavors whose app must only be
+# reached through a front app (oauth-proxy) turn the override off.
+APP_VISIBILITY_OVERRIDE=true
 
 project=""
 resource_group=""
@@ -44,6 +50,11 @@ Options:
   -r <registry-namespace>  ICR namespace (default: sanitized project name;
                            ICR namespaces are account-global)
   -h, --help               Show this help
+
+Environment:
+  CE_APP_VISIBILITY        public (default), private, or project. Private and project
+                           endpoints are unreachable for SaaS callers such as
+                           watsonx Orchestrate; protect a public API with API_KEY.
 EOF
 }
 
@@ -208,6 +219,20 @@ parse_args() {
   fi
 
   image="${REGISTRY_SERVER}/${registry_namespace}/${IMAGE_NAME}"
+
+  if [[ -n "${CE_APP_VISIBILITY:-}" ]]; then
+    if [[ "$APP_VISIBILITY_OVERRIDE" != "true" ]]; then
+      error "CE_APP_VISIBILITY is not supported here: this app must stay $APP_VISIBILITY behind its front app"
+      exit 2
+    fi
+    case "$CE_APP_VISIBILITY" in
+      public | private | project) APP_VISIBILITY="$CE_APP_VISIBILITY" ;;
+      *)
+        error "CE_APP_VISIBILITY must be public, private, or project (got '$CE_APP_VISIBILITY')"
+        exit 2
+        ;;
+    esac
+  fi
 }
 
 check_preconditions() {
@@ -338,6 +363,7 @@ validate_flavor_env() {
 validate_production_env() {
   local ca_cert=""
   local sslmode=""
+  local api_key_value=""
   local problem=""
   local index=1
 
@@ -358,6 +384,11 @@ validate_production_env() {
           ;;
       esac
     fi
+  fi
+
+  api_key_value=$(env_file_value API_KEY "$ENV_FILE" || true)
+  if [[ -n "$api_key_value" && ${#api_key_value} -lt 32 ]]; then
+    validation_problems+=("API_KEY is shorter than 32 characters, so the app would refuse to boot; generate one with: openssl rand -hex 32")
   fi
 
   validate_flavor_env
@@ -613,9 +644,26 @@ create_app_secret() {
   update_app_secret
 }
 
+# Prints the arguments that move an existing app off the legacy shared secret, if it still
+# references it. The old secret itself stays: other apps in the project may use it.
+legacy_secret_arguments() {
+  local application_name="$1"
+  local application_json=""
+
+  # An app named "app" already owns the legacy name; nothing to move.
+  [[ "$APP_SECRET" != "$LEGACY_APP_SECRET" ]] || return 0
+  # Capture first: grep -q closing a pipe early would fail the pipeline under pipefail.
+  application_json=$(ibmcloud ce application get --name "$application_name" --output json 2>/dev/null || true)
+  if grep -q "\"${LEGACY_APP_SECRET}\"" <<< "$application_json"; then
+    info "Moving '$application_name' from the shared '$LEGACY_APP_SECRET' secret to '$APP_SECRET'; delete '$LEGACY_APP_SECRET' once no app uses it." >&2
+    printf '%s\n' --env-from-secret-rm "$LEGACY_APP_SECRET"
+  fi
+}
+
 ensure_application() {
   local action="create"
   local arguments=()
+  local argument=""
 
   if ibmcloud ce application get --name "$APP_NAME" >/dev/null 2>&1; then
     info "Updating Code Engine application '$APP_NAME' with a cloud-side source build."
@@ -651,6 +699,10 @@ ensure_application() {
 
   if [[ "$action" == "create" ]]; then
     arguments+=(--image "$image")
+  else
+    while IFS= read -r argument; do
+      arguments+=("$argument")
+    done < <(legacy_secret_arguments "$APP_NAME")
   fi
 
   run_application_rollout "$APP_NAME" "${arguments[@]}"

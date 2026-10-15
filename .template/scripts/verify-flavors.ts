@@ -7,6 +7,7 @@ import process from "node:process";
 type FlavorManifest = {
   name: string;
   combinesWith?: string[];
+  requires?: string[];
 };
 
 type Preset = { id: string; flavors: string[] };
@@ -135,11 +136,14 @@ async function assertCarbonToaster(workspace: string, names: string[]) {
 async function verifyResourceMaterialization(workspace: string, names: string[]) {
   const skill = path.join(workspace, ".agents/skills/add-resource");
   const skillExists = await exists(skill);
-  const expectSkill = !names.includes("no-database");
+  const expectSkill = !names.includes("no-database") && !names.includes("mcp");
 
+  if (names.includes("mcp") && !(await exists(path.join(workspace, ".agents/skills/add-tool")))) {
+    throw new Error("mcp variants must ship the add-tool skill.");
+  }
   if (!expectSkill) {
     if (skillExists) {
-      throw new Error("no-database variants must not ship the add-resource skill.");
+      throw new Error(`${names.join(" + ")} must not ship the add-resource skill.`);
     }
     console.log("add-resource skill correctly absent; skipping materialization.");
     return;
@@ -297,7 +301,9 @@ function onlyFilter() {
 async function flavorVariants(only: Set<string> | null) {
   const available = await readManifests();
   const names = new Set(available.map((manifest) => manifest.name));
-  const variants = [[], ...available.map((manifest) => [manifest.name])];
+  // A flavor that requires another (mcp on backend-only) only exists as that combination.
+  const standalone = available.filter((manifest) => !manifest.requires?.length);
+  const variants = [[], ...standalone.map((manifest) => [manifest.name])];
 
   for (const manifest of available) {
     for (const combined of manifest.combinesWith ?? []) {

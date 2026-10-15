@@ -165,10 +165,18 @@ test("Code Engine fresh deploy targets explicitly and reconciles health settings
 
   const appEnv = await readFile(fixture.appEnv, "utf8");
   assert.doesNotMatch(appEnv, /cloud-key-must-not-reach-the-app/);
-  assert.match(
-    appEnv,
-    /(?:BETTER_AUTH_URL=https:\/\/cen-starter\.test\.eu-de\.codeengine\.appdomain\.cloud|OAUTH2_PROXY_REDIRECT_URL=https:\/\/cen-starter-oauth-proxy\.test\.eu-de\.codeengine\.appdomain\.cloud\/oauth2\/callback)/,
-  );
+  if (ceScript.includes("BETTER_AUTH_URL") || ceScript.includes("OAUTH2_PROXY_REDIRECT_URL")) {
+    assert.match(
+      appEnv,
+      /(?:BETTER_AUTH_URL=https:\/\/cen-starter\.test\.eu-de\.codeengine\.appdomain\.cloud|OAUTH2_PROXY_REDIRECT_URL=https:\/\/cen-starter-oauth-proxy\.test\.eu-de\.codeengine\.appdomain\.cloud\/oauth2\/callback)/,
+    );
+  } else {
+    // The mcp flavor derives nothing from the URL; it prints the /mcp endpoint instead.
+    assert.match(
+      output,
+      /MCP endpoint: https:\/\/cen-starter\.test\.eu-de\.codeengine\.appdomain\.cloud\/mcp/,
+    );
+  }
 
   if (ceScript.includes("private_application_url")) {
     // Two separate CE apps: the proxy upstream must be cluster-local from the very first
@@ -185,10 +193,15 @@ test("Code Engine fresh deploy targets explicitly and reconciles health settings
       /ce application (?:create|update) --name cen-starter-oauth-proxy .*--argument=--pass-host-header=false/,
     );
   }
-  assert.match(
-    log,
-    /ce application update --name cen-starter(?:-oauth-proxy)? --wait --wait-timeout 600/,
-  );
+  if (ceScript.includes("BETTER_AUTH_URL") || ceScript.includes("OAUTH2_PROXY_REDIRECT_URL")) {
+    // Derived values land in a second revision once the URL exists.
+    assert.match(
+      log,
+      /ce application update --name cen-starter(?:-oauth-proxy)? --wait --wait-timeout 600/,
+    );
+  } else {
+    assert.doesNotMatch(log, /ce application update/);
+  }
 });
 
 test("Code Engine names the application after the bootstrapped project", async (t) => {
@@ -338,6 +351,7 @@ test("Code Engine accepts an IBM Cloud Databases URL once a CA is configured", a
     [
       "DATABASE_URL=postgres://app:password@host.databases.appdomain.cloud:32000/ibmclouddb?sslmode=verify-full",
       "DATABASE_CA_CERT=cGxhY2Vob2xkZXI=",
+      "API_KEY=test-api-key-for-the-no-database-flavor",
       "OAUTH2_PROXY_OIDC_ISSUER_URL=https://auth.example.test/oidc",
       "OAUTH2_PROXY_CLIENT_ID=test-client-id",
       "OAUTH2_PROXY_CLIENT_SECRET=test-client-secret",
@@ -686,10 +700,87 @@ test("Code Engine update reuses credentials and fully reconciles the application
   assert.doesNotMatch(log, /ce project create/);
   assert.doesNotMatch(log, /ce registry (create|update)/);
   assert.match(log, /ce project select --name test-project/);
-  assert.match(log, /ce application update .*--env-from-secret app-env/);
+  assert.match(log, /ce application update .*--env-from-secret cen-starter-env/);
+  assert.doesNotMatch(log, /--env-from-secret-rm/);
   assert.match(log, /ce application update .*--max-scale 4/);
   assert.match(log, /ce application update .*--probe-live path=\/api\/health/);
   assert.match(log, new RegExp(`ce application update .*--visibility ${visibility}`));
+});
+
+test("Code Engine moves an existing app off the legacy shared app-env secret", async (t) => {
+  const fixture = await createCodeEngineFixture(t, { existing: true });
+  await writeFile(path.join(fixture.state, "legacy-secret"), "");
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.equal(result.status, 0, output);
+  assert.match(output, /Moving 'cen-starter(?:-oauth-proxy)?' from the shared 'app-env' secret/);
+  const log = await readFile(fixture.ibmcloudLog, "utf8");
+  assert.match(
+    log,
+    /ce application update --name cen-starter .*--env-from-secret cen-starter-env .*--env-from-secret-rm app-env/,
+  );
+  // The old secret may still serve other apps in the project; it is never deleted.
+  assert.doesNotMatch(log, /ce secret delete/);
+});
+
+test("Code Engine visibility follows CE_APP_VISIBILITY where the flavor allows it", async (t) => {
+  const ceScript = await readFile(path.join(root, "deploy/ce-deploy.sh"), "utf8");
+  const overridable = ceScript.includes("APP_VISIBILITY_OVERRIDE=true");
+  const run = (fixture, visibility) =>
+    spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+      cwd: fixture.directory,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CE_APP_VISIBILITY: visibility,
+        MOCK_STATE: fixture.state,
+        PATH: `${fixture.bin}:${process.env.PATH}`,
+      },
+    });
+
+  const fixture = await createCodeEngineFixture(t);
+  const result = run(fixture, "private");
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  const log = await readFile(fixture.ibmcloudLog, "utf8");
+  if (overridable) {
+    assert.equal(result.status, 0, output);
+    assert.match(log, /ce application create --name cen-starter .*--visibility private/);
+  } else {
+    // A front-app flavor keeps its app project-only; overriding it would bypass the proxy.
+    assert.equal(result.status, 2, output);
+    assert.match(output, /CE_APP_VISIBILITY is not supported here/);
+    assert.doesNotMatch(log, /ce application/);
+  }
+
+  const invalid = run(await createCodeEngineFixture(t), "internal");
+  assert.equal(invalid.status, 2);
+  assert.match(
+    `${invalid.stdout ?? ""}${invalid.stderr ?? ""}`,
+    overridable ? /must be public, private, or project/ : /is not supported here/,
+  );
+});
+
+test("Code Engine refuses an API_KEY the app would reject at boot", async (t) => {
+  const fixture = await createCodeEngineFixture(t);
+  const envFile = path.join(fixture.directory, ".env.production");
+  const env = await readFile(envFile, "utf8");
+  await writeFile(envFile, env.replace(/^API_KEY=.*$/m, "API_KEY=too-short"));
+
+  const result = spawnSync("bash", ["deploy/ce-deploy.sh", "-p", "test-project"], {
+    cwd: fixture.directory,
+    encoding: "utf8",
+    env: { ...process.env, MOCK_STATE: fixture.state, PATH: `${fixture.bin}:${process.env.PATH}` },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /API_KEY is shorter than 32 characters/);
+  assert.doesNotMatch(await readFile(fixture.ibmcloudLog, "utf8"), /ce (project|application)/);
 });
 
 async function createFixture(
@@ -981,7 +1072,7 @@ if [[ "$*" == ce\ registry\ create* || "$*" == ce\ registry\ update* ]]; then
   exit 0
 fi
 
-if [[ "$*" == "ce secret get --name app-env --output yaml" ]]; then
+if [[ "$*" == "ce secret get --name cen-starter-env --output yaml" ]]; then
   # The real CLI prints data: values already DECODED (plaintext), not base64 like raw k8s.
   if [[ -f "$MOCK_STATE/secret-created" && -f "$MOCK_STATE/app-env" ]]; then
     printf 'data:\n'
@@ -1023,7 +1114,9 @@ if [[ "$*" == ce\ application\ get\ --name\ * ]]; then
   if [[ "$*" == *"--output json" ]]; then
     # Like the real CLI: a missing application is a failure, not empty JSON.
     [[ -f "$MOCK_STATE/$marker" ]] || exit 1
-    if [[ -f "$MOCK_STATE/app-crashloop" ]]; then
+    if [[ -f "$MOCK_STATE/legacy-secret" ]]; then
+      printf '{"spec":{"template":{"spec":{"containers":[{"envFrom":[{"secretRef":{"name":"app-env"}}]}]}}},"status":{"latestCreatedRevisionName":"%s-00001"}}\n' "$app_name"
+    elif [[ -f "$MOCK_STATE/app-crashloop" ]]; then
       printf '{"status":{"latestCreatedRevisionName":"%s-00002"}}\n' "$app_name"
     else
       printf '{"status":{"latestCreatedRevisionName":"%s-00001"}}\n' "$app_name"

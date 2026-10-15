@@ -21,9 +21,10 @@ oauth-proxy needs the user table).
   login/signup/settings/admin routes, and the Drizzle-based `add-resource` and
   `db-migrations` skills (their canonical workflow assumes a database).
 - **Auth seam swap**: `backend/src/auth/index.ts` becomes an API-key implementation with the
-  identical exported interface (`getSession`, `requireAuth`, `Session`). A request with
-  `x-api-key: $API_KEY` gets a synthetic admin session for `api@local`; everything else is
-  unauthenticated. Without persistence, local accounts can't be durable — an API key reflects
+  identical exported interface (`getSession`, `requireAuth`, `Session`). A request carrying
+  `API_KEY` (>= 32 characters; `x-api-key` or `Authorization: Bearer`, compared in constant
+  time by the shared guard in `backend/src/auth/api-key.ts`) gets a synthetic admin session
+  for `api@local`; everything else is unauthenticated. Without persistence, local accounts can't be durable — an API key reflects
   the real constraint.
 - Frontend keeps a shell without auth guard or user menu; `frontend/src/lib/auth.ts` stays as
   a stub with the same exports so future code doesn't pull better-auth back into the bundle.
@@ -42,7 +43,7 @@ oauth-proxy needs the user table).
 2. Boot without Docker and verify:
 
    ```bash
-   API_KEY=dev-only-api-key pnpm --filter @cen/backend dev
+   API_KEY=dev-only-api-key-change-me-please-really pnpm --filter @cen/backend dev
    curl http://localhost:3000/api/health   # {"status":"ok"}
    ```
 

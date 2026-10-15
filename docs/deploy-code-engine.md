@@ -91,7 +91,7 @@ Fill it locally and rerun; never commit it or paste its contents into chat.
 
 One command, first time and every time after. It selects or creates the project, ensures
 the registry namespace and secret, uploads your working tree for a cloud-side image build,
-creates or updates the `app-env` secret and the app, then derives the URL-dependent values
+creates or updates the app's `<app-name>-env` secret and the app, then derives the URL-dependent values
 and rolls a fresh revision with them. On the oauth-proxy flavor it also deploys the
 `oauth2-proxy` front app and switches the main app to project-only visibility, so identity
 headers can't be spoofed from the internet — the URL you share is the proxy's.
@@ -103,6 +103,17 @@ Every build after that takes a few minutes.
 Flags: `-g <resource-group>` to target one, `-r <registry-namespace>` to override the
 default (derived from the project name; ICR namespaces are account-global), and
 `--region <region>` to select the Code Engine region explicitly.
+
+Visibility: the app is `public` by default. `CE_APP_VISIBILITY=private` (or `project`)
+deploys it without a public URL — only for callers that have been confirmed to reach
+private Code Engine endpoints; SaaS callers such as watsonx Orchestrate generally cannot.
+Protect a public API with `API_KEY` instead. The oauth-proxy flavor refuses the override:
+its app must stay behind the proxy.
+
+Each app gets its own secret, `<app-name>-env`, so two apps from this template can share a
+project. Apps deployed by earlier template versions used one project-wide `app-env` secret;
+the next deploy moves them to their own secret and leaves `app-env` in place — delete it
+with `ibmcloud ce secret delete --name app-env` once no app references it.
 
 The command waits for new projects and application revisions, applies HTTP readiness and
 liveness probes against `/api/health`, and reconciles runtime settings on updates as well as

@@ -1,9 +1,12 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { auth } from "./better-auth";
 
-// The auth seam. Routes only ever touch getSession/requireAuth — never the
-// implementation behind them. Swapping auth (e.g. the oauth-proxy flavor)
-// replaces better-auth.ts and this file's internals, nothing else.
+export { type Client, type ClientEnv, getClient, requireApiKey } from "./api-key";
+
+// The auth seam. Routes only ever touch getSession/requireAuth (people) and
+// getClient/requireApiKey (software) — never the implementation behind them.
+// Swapping auth (e.g. the oauth-proxy flavor) replaces better-auth.ts and this
+// file's internals, nothing else.
 
 export type Session = {
   user: {

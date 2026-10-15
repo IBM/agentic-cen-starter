@@ -5,8 +5,11 @@ import { db } from "../db";
 import { user } from "../db/schema";
 import { env } from "../env";
 
-// The auth seam. Routes only ever touch getSession/requireAuth — never the
-// implementation behind them. In this flavor, oauth2-proxy owns the login flow.
+export { type Client, type ClientEnv, getClient, requireApiKey } from "./api-key";
+
+// The auth seam. Routes only ever touch getSession/requireAuth (people) and
+// getClient/requireApiKey (software) — never the implementation behind them.
+// In this flavor, oauth2-proxy owns the login flow.
 
 export type Session = {
   user: {

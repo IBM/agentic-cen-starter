@@ -1,0 +1,66 @@
+{
+  "name": "mcp",
+  "description": "Turn the backend-only API into an MCP server for agents such as watsonx Orchestrate: a stateless, API-key protected /mcp endpoint with reference note tools; Better Auth and user accounts are removed, PostgreSQL/Drizzle stay.",
+  "conflicts": ["carbon", "no-database", "oauth-proxy"],
+  "combinesWith": ["backend-only"],
+  "requires": ["backend-only"],
+  "delete": [
+    "backend/src/auth/better-auth.ts",
+    "backend/src/db/schema/auth.ts",
+    "backend/src/db/seed.ts",
+    "backend/src/db/migrations/**",
+    ".template/scaffold/agent-skills/add-resource/**"
+  ],
+  "overlay": "overlay",
+  "edits": [
+    {
+      "file": "package.json",
+      "find": "    \"db:migrate\": \"pnpm --filter @cen/backend db:migrate\",\n    \"db:seed\": \"pnpm --filter @cen/backend db:seed\",\n",
+      "replace": "    \"db:migrate\": \"pnpm --filter @cen/backend db:migrate\",\n"
+    },
+    {
+      "file": "backend/package.json",
+      "find": "    \"db:seed\": \"tsx src/db/seed.ts\",\n",
+      "replace": ""
+    },
+    {
+      "file": "scripts/dev.mjs",
+      "find": "    await required(pnpm, [\"db:seed\"]);\n",
+      "replace": ""
+    },
+    {
+      "file": "pnpm-workspace.yaml",
+      "find": "  '@hookform/resolvers': ^5.2.1\n",
+      "replace": "  '@hookform/resolvers': ^5.2.1\n  '@modelcontextprotocol/sdk': ^1.32.1\n"
+    },
+    {
+      "file": "pnpm-workspace.yaml",
+      "find": "  better-auth: ^1.3.0\n",
+      "replace": ""
+    },
+    {
+      "file": "deploy/ce-deploy.sh",
+      "find": "# Flavors extend production-env validation here (the oauth-proxy flavor checks IdP values).\nvalidate_flavor_env() {\n  :\n}",
+      "replace": "# The mcp flavor refuses to deploy without a real API_KEY: every /mcp request needs it.\nvalidate_flavor_env() {\n  local api_key_value=\"\"\n\n  api_key_value=$(env_file_value API_KEY \"$ENV_FILE\" || true)\n  if [[ -z \"$api_key_value\" || \"$api_key_value\" == \"replace-with-a-real-api-key\" ]]; then\n    validation_problems+=(\"API_KEY is missing or still the example value; generate one with: openssl rand -hex 32\")\n  fi\n}"
+    },
+    {
+      "file": "deploy/ce-deploy.sh",
+      "find": "derive_env_values() {\n  local env_file=\"$1\"\n  local auth_url=\"\"\n  local derived_env_file=\"${env_file}.derived\"\n\n  auth_url=$(env_file_value BETTER_AUTH_URL \"$env_file\" || true)\n  if [[ -n \"$auth_url\" && \"$auth_url\" != \"https://cen-starter.example.com\" && \"$auth_url\" != \"https://pending.invalid\" ]]; then\n    return\n  fi\n\n  if [[ -z \"$app_url\" ]]; then\n    app_url=$(application_url \"$APP_NAME\")\n  fi\n\n  if [[ -z \"$app_url\" ]]; then\n    if [[ \"$finalizing_derived_urls\" == \"true\" ]]; then\n      warning \"could not derive BETTER_AUTH_URL because the Code Engine application URL is unavailable\"\n      return\n    fi\n    # First deploy: no application URL exists yet, but the backend refuses to boot without\n    # a valid BETTER_AUTH_URL. Seed a placeholder so the first revision becomes ready;\n    # finalize_derived_urls swaps in the real URL immediately after.\n    tmp_files+=(\"$derived_env_file\")\n    sed '/^BETTER_AUTH_URL=/d;/^export BETTER_AUTH_URL=/d' \"$env_file\" > \"$derived_env_file\"\n    printf '\\nBETTER_AUTH_URL=%s\\n' \"https://pending.invalid\" >> \"$derived_env_file\"\n    mv \"$derived_env_file\" \"$env_file\"\n    info \"seeded placeholder BETTER_AUTH_URL for the first boot; the real URL is derived after the first deploy\"\n    return\n  fi\n\n  tmp_files+=(\"$derived_env_file\")\n  sed '/^BETTER_AUTH_URL=/d;/^export BETTER_AUTH_URL=/d' \"$env_file\" > \"$derived_env_file\"\n  printf '\\nBETTER_AUTH_URL=%s\\n' \"$app_url\" >> \"$derived_env_file\"\n  mv \"$derived_env_file\" \"$env_file\"\n\n  derived_env_summary+=(\"BETTER_AUTH_URL=$app_url\")\n  info \"derived BETTER_AUTH_URL=$app_url (set it in $ENV_FILE to override)\"\n}\n",
+      "replace": "# Nothing derives from the application URL: an MCP server has no browser sign-in.\nderive_env_values() {\n  :\n}\n"
+    },
+    {
+      "file": "deploy/ce-deploy.sh",
+      "find": "  info \"Database: external DATABASE_URL from $ENV_FILE\"\n",
+      "replace": "  info \"Database: external DATABASE_URL from $ENV_FILE\"\n  if [[ -n \"$app_url\" ]]; then\n    info \"MCP endpoint: $app_url/mcp (send API_KEY as x-api-key or Authorization: Bearer)\"\n    info \"Register it in watsonx Orchestrate (snake_case toolkit name, API_KEY in a connection):\"\n    info \"  orchestrate toolkits add -k mcp -n <toolkit_name> --description \\\"<what it does>\\\" --url $app_url/mcp --transport streamable_http --tools \\\"*\\\" --app-id <connection>\"\n  fi\n"
+    }
+  ],
+  "packageJson": {
+    "@cen/backend": {
+      "remove": ["better-auth"],
+      "add": {
+        "@modelcontextprotocol/sdk": "catalog:"
+      }
+    }
+  },
+  "verify": ["pnpm check", "pnpm test"]
+}

@@ -29,7 +29,8 @@ pnpm flavor finalize                 # verifies, activates compatible skills, de
 ```
 
 Supported combinations are declared per manifest (`combinesWith`) and are order-sensitive —
-the combining flavor goes last: `oauth-proxy carbon`, `backend-only no-database`. Colliding
+the combining flavor goes last: `oauth-proxy carbon`, `backend-only no-database`,
+`backend-only mcp`. A flavor that `requires` another (`mcp`) exists only in that combination. Colliding
 files for a combination live in `<flavor>/combo/<other>/`. Flavor decision guidance lives in
 `.agents/skills/setup/references/<flavor>.md`.
 
