@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com), semver on `cen.templateV
 
 ## [Unreleased]
 
+- Remediate IBM security notification #3 (CVE-2026-93749): update the transitive
+  `source-map-js` dependency to 1.2.2, fixing denial of service from crafted source maps.
+  Also update `seroval` to 1.6.11 for CVE-2026-104846 and CVE-2026-104845 found by the
+  dependency audit.
 - **API keys everywhere.** Every configuration now ships `requireApiKey` / `apiKeyRouter()`
   (`backend/src/auth/api-key.ts`) for routes that software calls: `API_KEY` (optional,
   >= 32 characters) as `x-api-key` or `Authorization: Bearer`, compared in constant time,
